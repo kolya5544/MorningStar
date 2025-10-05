@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100.51 57.674 233.488 238.058" width="233.488px" height="238.058px">
+  <path d="M 111.798 121.083 L 111.798 242.391 M 164.822 89.269 L 164.822 201.066 M 217.844 57.674 L 217.844 204.762 M 270.867 73.636 L 270.867 231.787 M 323.89 147.146 L 323.89 210.577" stroke="currentColor" strokewidth="2" strokelinecap="round" style="stroke-width: 1px;" transform="matrix(1, 0, 0, 1, 1.4210854715202004e-14, 3.552713678800501e-15)"/>
+  <rect x="100.696" y="151.691" width="21.209" height="74.233" rx="2" style="stroke-width: 1px; fill: rgb(127, 0, 0);" transform="matrix(1, 0, 0, 1, 1.4210854715202004e-14, 3.552713678800501e-15)"/>
+  <rect x="154.724" y="94.352" width="21.209" height="84.837" rx="2" style="stroke-width: 1px; fill: rgb(0, 131, 19);" transform="matrix(1, 0, 0, 1, 1.4210854715202004e-14, 3.552713678800501e-15)"/>
+  <rect x="206.743" y="88.954" width="21.209" height="95.441" rx="2" style="stroke-width: 1px; fill: rgb(127, 0, 0);" transform="matrix(1, 0, 0, 1, 1.4210854715202004e-14, 3.552713678800501e-15)"/>
+  <rect x="260.771" y="99.843" width="21.209" height="95.441" rx="2" style="stroke-width: 1px; fill: rgb(0, 131, 19);" transform="matrix(1, 0, 0, 1, 1.4210854715202004e-14, 3.552713678800501e-15)"/>
+  <rect x="312.789" y="174.862" width="21.209" height="63.627" rx="2" style="stroke-width: 1px; fill: rgb(127, 0, 0);" transform="matrix(1, 0, 0, 1, 1.4210854715202004e-14, 3.552713678800501e-15)"/>
+  <path d="M 100.51 295.732 C 100.51 231.284 152.753 179.041 217.201 179.041 C 281.648 179.041 333.892 231.284 333.892 295.732 L 100.51 295.732 Z" style="stroke-width: 1px; fill: rgb(173, 152, 65);" transform="matrix(1, 0, 0, 1, 1.4210854715202004e-14, 3.552713678800501e-15)"/>
+  <path d="M 119.905 295.732 C 119.905 241.622 163.768 197.759 217.878 197.759 C 271.988 197.759 315.852 241.622 315.852 295.732 L 119.905 295.732 Z" style="stroke-width: 1px; fill: rgb(197, 159, 0);" transform="matrix(1, 0, 0, 1, 1.4210854715202004e-14, 3.552713678800501e-15)"/>
+</svg>

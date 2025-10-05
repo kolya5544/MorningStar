@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* тёмная тема и акцент */
+:root {
+  --primary: 216 63% 23%; /* #16335f */
+  --primary-foreground: 0 0% 100%;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
