@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: morningstar-api
+    environment:
+      - SERVICE_NAME=morningstar-api
+      - SERVICE_VERSION=v0.1.0
+    expose:
+      - "5483:8080"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: morningstar-web
+    ports:
+      - "5482:80"
+    depends_on:
+      - api
+    restart: unless-stopped
