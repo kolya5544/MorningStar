@@ -1,24 +1,35 @@
-import React, { JSX } from "react";
+import React, { JSX, useEffect, useState } from "react"; // ← + useEffect
 import { Button } from "@/components/ui/button";
 import { LogIn, UserPlus } from "lucide-react";
-import { useState } from "react";
+import { useState as useReactState } from "react"; // удалите если дублирует строку выше
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { apiHealth } from "@/Api"; // ← + импорт
 
-/**
- * MorningStar Landing Page
- * - Single-screen static hero
- * - Dark theme with deep blue accents
- * - Header with brand and auth actions
- * - Centered headline and primary CTAs
- */
 export default function Landing(): JSX.Element {
   const [openSignUp, setOpenSignUp] = useState(false);
   const [openLogin, setOpenLogin] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [apiOk, setApiOk] = useState<boolean | null>(null); // ← + состояние API
   const nav = useNavigate();
+
+  useEffect(() => {
+    // ← + health-check
+    let stop = false;
+    (async () => {
+      try {
+        const r = await apiHealth();
+        if (!stop) setApiOk(r?.status?.toLowerCase?.() === "ok");
+      } catch {
+        if (!stop) setApiOk(false);
+      }
+    })();
+    return () => {
+      stop = true;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-black text-white relative">
@@ -28,10 +39,8 @@ export default function Landing(): JSX.Element {
         className="absolute inset-0 z-0 bg-center bg-cover"
         style={{ backgroundImage: "url('/bg.jpg')" }}
       />
-      {/* Dark overlay */}
       <div className="absolute inset-0 z-10 bg-black/70" />
 
-      {/* Content above overlay */}
       <div className="relative z-20">
         {/* Header */}
         <header className="sticky top-0 z-20 w-full">
@@ -45,6 +54,21 @@ export default function Landing(): JSX.Element {
                   className="h-8 w-8 shrink-0 align-middle"
                 />
                 <span className="text-lg font-semibold tracking-wide">MorningStar</span>
+
+                {/* ← индикатор API */}
+                <span
+                  title={apiOk === null ? "Checking API…" : apiOk ? "API OK" : "API DOWN"}
+                  className={`ml-3 inline-flex items-center gap-2 text-xs ${
+                    apiOk === null ? "text-zinc-400" : apiOk ? "text-emerald-400" : "text-red-400"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full ${
+                      apiOk === null ? "bg-zinc-500" : apiOk ? "bg-emerald-400" : "bg-red-400"
+                    }`}
+                  />
+                  {apiOk === null ? "checking" : apiOk ? "api ok" : "api down"}
+                </span>
               </div>
 
               {/* Actions */}
@@ -65,7 +89,6 @@ export default function Landing(): JSX.Element {
               </nav>
             </div>
           </div>
-          {/* subtle divider */}
           <div className="h-px w-full bg-gradient-to-r from-transparent via-[#16335f] to-transparent opacity-50" />
         </header>
 
@@ -92,6 +115,7 @@ export default function Landing(): JSX.Element {
             </Button>
           </div>
         </main>
+
         {/* Sign Up modal */}
         <Modal
           open={openSignUp}
@@ -101,10 +125,13 @@ export default function Landing(): JSX.Element {
           }}
           title="Create your account"
           onPrimary={() => {
-            //setOpenSignUp(false);
+            if (apiOk === false) {
+              alert("API is unavailable");
+              return;
+            }
             nav("/dashboard");
           }}
-          primaryLabel="Continue"
+          primaryLabel={apiOk === false ? "API down" : "Continue"}
         >
           <label className="block text-sm text-zinc-300">Email</label>
           <Input
@@ -125,10 +152,13 @@ export default function Landing(): JSX.Element {
           }}
           title="Log in"
           onPrimary={() => {
-            //setOpenLogin(false);
+            if (apiOk === false) {
+              alert("API is unavailable");
+              return;
+            }
             nav("/dashboard");
           }}
-          primaryLabel="Continue"
+          primaryLabel={apiOk === false ? "API down" : "Continue"}
         >
           <div className="space-y-3">
             <div>
@@ -153,7 +183,6 @@ export default function Landing(): JSX.Element {
         </Modal>
       </div>
 
-      {/* Footer spacing for full-screen aesthetics */}
       <div className="pb-10" />
     </div>
   );
