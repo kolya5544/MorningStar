@@ -85,13 +85,23 @@ export const addAsset = (pid: UUID, b: AssetCreate) =>
   });
 
 // transactions
-export const listTransactions = (pid: UUID) =>
-  request<TxItem[]>(`/v1/portfolios/${pid}/transactions`);
+export const listTransactions = (pid: UUID, assetId?: UUID) =>
+  request<TxItem[]>(`/v1/portfolios/${pid}/transactions${assetId ? `?asset_id=${assetId}` : ""}`);
+
 export const addTransaction = (pid: UUID, b: TxCreate) =>
   request<TxItem>(`/v1/portfolios/${pid}/transactions`, {
     method: "POST",
     body: JSON.stringify(b),
   });
+
+export const updateTransaction = (pid: UUID, tid: UUID, b: TxCreate) =>
+  request<TxItem>(`/v1/portfolios/${pid}/transactions/${tid}`, {
+    method: "PUT",
+    body: JSON.stringify(b),
+  });
+
+export const deleteTransaction = (pid: UUID, tid: UUID) =>
+  request<void>(`/v1/portfolios/${pid}/transactions/${tid}`, { method: "DELETE" });
 
 // timeseries
 export const getTimeseries = (pid: UUID, days = 14) =>
@@ -107,3 +117,25 @@ export const connectExchange = (b: ExchangeConnectRequest) =>
   request<any>("/v1/integrations/exchanges", { method: "POST", body: JSON.stringify(b) });
 export const deleteExchange = (connId: string) =>
   request<void>(`/v1/integrations/exchanges/${connId}`, { method: "DELETE" });
+
+export type BybitTicker = {
+  category: string;
+  symbol: string;
+  bid1Price: string;
+  bid1Size: string;
+  ask1Price: string;
+  ask1Size: string;
+  lastPrice: string;
+  prevPrice24h: string;
+  price24hPcnt: string; // fraction, e.g. "0.0068" => 0.68%
+  highPrice24h: string;
+  lowPrice24h: string;
+  turnover24h: string;
+  volume24h: string;
+  usdIndexPrice?: string | null;
+};
+
+export const getBybitTicker = (base: string, category = "spot") =>
+  request<BybitTicker>(
+    `/v1/market/bybit/ticker/${encodeURIComponent(base)}?category=${encodeURIComponent(category)}`,
+  );

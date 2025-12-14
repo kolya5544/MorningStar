@@ -25,3 +25,4 @@ class TxType(str, Enum):
 class ApiError(BaseModel):
     code: str
     message: str
+
