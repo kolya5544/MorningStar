@@ -1,11 +1,41 @@
+// Api.tsx
 const BASE = "/api";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(`${BASE}${path}`, {
-    headers: { accept: "application/json", "content-type": "application/json" },
-    ...init,
-  });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+const TOKEN_KEY = "ms_access_token";
+
+export const getAccessToken = () => localStorage.getItem(TOKEN_KEY);
+export const setAccessToken = (t: string) => localStorage.setItem(TOKEN_KEY, t);
+export const clearAccessToken = () => localStorage.removeItem(TOKEN_KEY);
+
+export class ApiHttpError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export const isAuthError = (e: any) => e instanceof ApiHttpError && e.status === 401;
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers || undefined);
+  headers.set("accept", "application/json");
+  headers.set("content-type", "application/json");
+
+  const token = getAccessToken();
+  if (token) headers.set("authorization", `Bearer ${token}`);
+
+  const r = await fetch(`${BASE}${path}`, { ...init, headers });
+
+  if (!r.ok) {
+    let msg = `${r.status} ${r.statusText}`;
+    try {
+      const j = await r.json();
+      msg = j?.detail || j?.message || msg;
+    } catch {}
+    throw new ApiHttpError(msg, r.status);
+  }
+
   return r.status === 204 ? (undefined as T) : await r.json();
 }
 
@@ -26,6 +56,12 @@ export type PortfolioSummary = {
 export type PortfolioDetail = PortfolioSummary & { created_at: string };
 
 export type PortfolioCreate = { name: string; emoji?: string | null; visibility: Visibility };
+
+export type PortfolioUpdate = {
+  name?: string | null;
+  emoji?: string | null;
+  visibility?: Visibility | null;
+};
 
 export type AssetSummary = {
   id: UUID;
@@ -64,6 +100,11 @@ export type ExchangeConnectRequest = {
   api_secret: string;
 };
 
+export type BybitKeysImportRequest = {
+  api_key: string;
+  api_secret: string;
+};
+
 /* ===== API calls ===== */
 // health
 export const apiHealth = () => request<{ status: string }>("/health");
@@ -75,6 +116,22 @@ export const createPortfolio = (b: PortfolioCreate) =>
 export const getPortfolio = (pid: UUID) => request<PortfolioDetail>(`/v1/portfolios/${pid}`);
 export const deletePortfolio = (pid: UUID) =>
   request<void>(`/v1/portfolios/${pid}`, { method: "DELETE" });
+export const importPortfolio = (sourceId: UUID) =>
+  request<PortfolioDetail>("/v1/portfolios/import", {
+    method: "POST",
+    body: JSON.stringify({ source_id: sourceId }),
+  });
+export const updatePortfolio = (pid: UUID, b: PortfolioUpdate) =>
+  request<PortfolioDetail>(`/v1/portfolios/${pid}`, {
+    method: "PUT",
+    body: JSON.stringify(b),
+  });
+export async function importBybitKeys(pid: UUID, body: BybitKeysImportRequest) {
+  return request<PortfolioDetail>(`/v1/portfolios/${pid}/import/bybit`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
 
 // assets
 export const listAssets = (pid: UUID) => request<AssetSummary[]>(`/v1/portfolios/${pid}/assets`);
@@ -139,3 +196,21 @@ export const getBybitTicker = (base: string, category = "spot") =>
   request<BybitTicker>(
     `/v1/market/bybit/ticker/${encodeURIComponent(base)}?category=${encodeURIComponent(category)}`,
   );
+
+export type AuthRegisterResponse = { ok: boolean };
+export type AuthTokenResponse = { access_token: string; token_type: string; expires_in: number };
+export type AuthMe = { id: string; email: string };
+
+export const authRegister = (email: string) =>
+  request<AuthRegisterResponse>("/v1/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+
+export const authLogin = (email: string, password: string) =>
+  request<AuthTokenResponse>("/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+
+export const authMe = () => request<AuthMe>("/v1/auth/me");

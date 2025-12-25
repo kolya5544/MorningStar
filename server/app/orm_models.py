@@ -17,11 +17,33 @@ from app.models.common import Visibility, PortfolioKind, TxType
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
+class UserORM(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    portfolios: Mapped[list["PortfolioORM"]] = relationship(
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 class PortfolioORM(Base):
     __tablename__ = "portfolios"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    owner: Mapped["UserORM"] = relationship(back_populates="portfolios")
+
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     emoji: Mapped[str | None] = mapped_column(String(8), nullable=True)
 

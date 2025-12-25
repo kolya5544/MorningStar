@@ -5,14 +5,20 @@ import { useState as useReactState } from "react"; // удалите если д
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import { apiHealth } from "@/Api"; // ← + импорт
+import { apiHealth, authRegister, authLogin, setAccessToken } from "@/Api";
 
 export default function Landing(): JSX.Element {
   const [openSignUp, setOpenSignUp] = useState(false);
   const [openLogin, setOpenLogin] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [apiOk, setApiOk] = useState<boolean | null>(null); // ← + состояние API
+  const [apiOk, setApiOk] = useState<boolean | null>(null);
+  const [signUpBusy, setSignUpBusy] = useState(false);
+  const [signUpErr, setSignUpErr] = useState<string | null>(null);
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginErr, setLoginErr] = useState<string | null>(null);
+  const [loginHint, setLoginHint] = useState<string | null>(null);
+
   const nav = useNavigate();
 
   useEffect(() => {
@@ -124,15 +130,29 @@ export default function Landing(): JSX.Element {
             setEmail("");
           }}
           title="Create your account"
-          onPrimary={() => {
-            if (apiOk === false) {
-              alert("API is unavailable");
-              return;
+          onPrimary={async () => {
+            if (apiOk === false) return alert("API is unavailable");
+            const em = email.trim();
+            if (!em) return;
+
+            try {
+              setSignUpBusy(true);
+              setSignUpErr(null);
+              await authRegister(em);
+              setOpenSignUp(false);
+              setLoginHint("Password sent to your email. Use it to log in.");
+              setOpenLogin(true);
+            } catch (e: any) {
+              setSignUpErr(e?.message ?? "Failed to sign up");
+            } finally {
+              setSignUpBusy(false);
             }
-            nav("/dashboard");
           }}
-          primaryLabel={apiOk === false ? "API down" : "Continue"}
+          primaryLabel={
+            signUpBusy ? "Please wait…" : apiOk === false ? "API down" : "Send password"
+          }
         >
+          {signUpErr && <div className="text-sm text-red-400">{signUpErr}</div>}
           <label className="block text-sm text-zinc-300">Email</label>
           <Input
             type="email"
@@ -151,15 +171,28 @@ export default function Landing(): JSX.Element {
             setPassword("");
           }}
           title="Log in"
-          onPrimary={() => {
-            if (apiOk === false) {
-              alert("API is unavailable");
-              return;
+          onPrimary={async () => {
+            if (apiOk === false) return alert("API is unavailable");
+            const em = email.trim();
+            const pw = password;
+            if (!em || !pw) return;
+
+            try {
+              setLoginBusy(true);
+              setLoginErr(null);
+              const tok = await authLogin(em, pw);
+              setAccessToken(tok.access_token);
+              nav("/dashboard");
+            } catch (e: any) {
+              setLoginErr(e?.message ?? "Failed to log in");
+            } finally {
+              setLoginBusy(false);
             }
-            nav("/dashboard");
           }}
-          primaryLabel={apiOk === false ? "API down" : "Continue"}
+          primaryLabel={loginBusy ? "Please wait…" : apiOk === false ? "API down" : "Continue"}
         >
+          {loginHint && <div className="text-sm text-emerald-400">{loginHint}</div>}
+          {loginErr && <div className="text-sm text-red-400">{loginErr}</div>}
           <div className="space-y-3">
             <div>
               <label className="block text-sm text-zinc-300">Email</label>

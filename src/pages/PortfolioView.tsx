@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Plus, Home, Trash2, Pencil } from "lucide-react";
+import { Settings } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
+import { Download } from "lucide-react";
 
 /* === API === */
 import {
@@ -13,6 +16,9 @@ import {
   updateTransaction,
   deleteTransaction,
   getBybitTicker,
+  updatePortfolio,
+  importBybitKeys,
+  type Visibility,
   type UUID,
   type AssetSummary,
   type TxItem,
@@ -314,6 +320,22 @@ export function PortfolioView(): JSX.Element {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteErr, setQuoteErr] = useState<string | null>(null);
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsErr, setSettingsErr] = useState<string | null>(null);
+  const [vis, setVis] = useState<Visibility>("private");
+
+  const [importOpen, setImportOpen] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importErr, setImportErr] = useState<string | null>(null);
+  const [importKey, setImportKey] = useState("");
+  const [importSecret, setImportSecret] = useState("");
+
+  // чтобы форс-рефетчить tx даже если active не менялся
+  const [txRefresh, setTxRefresh] = useState(0);
+
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     if (!active) {
       setQuote(null);
@@ -406,6 +428,7 @@ export function PortfolioView(): JSX.Element {
         if (cancelled) return;
 
         setPortfolioTitle(p.name);
+        setVis((p.visibility ?? "private") as Visibility);
         const ui: UiAsset[] = a.map((x: AssetSummary) => ({
           id: x.id,
           symbol: x.symbol,
@@ -448,12 +471,12 @@ export function PortfolioView(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [id, active]);
+  }, [id, active, txRefresh]);
 
   return (
-    <div className="min-h-screen bg-black text-white grid grid-cols-[280px_1fr]">
+    <div className="h-screen overflow-hidden bg-black text-white grid grid-cols-[280px_1fr]">
       {/* Sidebar */}
-      <aside className="border-r border-white/10 bg-zinc-950/60 flex flex-col">
+      <aside className="h-full border-r border-white/10 bg-zinc-950/60 flex flex-col">
         <div className="h-16 px-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/morningstar.svg" alt="MorningStar" className="h-7 w-7" />
@@ -461,9 +484,23 @@ export function PortfolioView(): JSX.Element {
               {portfolioTitle || id}
             </span>
           </div>
-          <Button variant="outline" size="sm" onClick={() => nav("/dashboard")}>
-            <Home className="h-4 w-4 mr-2" /> Home
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => nav("/dashboard")}>
+              <Home className="h-4 w-4 mr-2" /> Home
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSettingsErr(null);
+                setSettingsOpen(true);
+              }}
+              title="Portfolio settings"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <div className="h-px w-full bg-white/10" />
 
@@ -530,9 +567,9 @@ export function PortfolioView(): JSX.Element {
           )}
         </div>
 
-        <div className="p-2">
+        <div className="p-2 flex gap-2">
           <Button
-            className="w-full"
+            className="flex-1"
             variant="outline"
             disabled={busyAdd || !id}
             onClick={() => {
@@ -542,17 +579,32 @@ export function PortfolioView(): JSX.Element {
           >
             <Plus className="h-4 w-4 mr-2" /> Add asset
           </Button>
+
+          <Button
+            variant="outline"
+            disabled={!id}
+            title="Import from Bybit"
+            onClick={() => {
+              setImportErr(null);
+              setImportKey("");
+              setImportSecret("");
+              setImportOpen(true);
+            }}
+            className="w-10 px-0"
+          >
+            <Download className="h-4 w-4" />
+          </Button>
         </div>
       </aside>
 
       {/* Main panel */}
-      <section className="min-h-screen p-6">
+      <section className="h-full min-h-0 p-6 overflow-hidden">
         {!activeAsset ? (
           <div className="h-full rounded-2xl border border-white/10 bg-zinc-950/40 p-6 flex items-center justify-center text-zinc-400">
             Select an asset on the left
           </div>
         ) : (
-          <div className="h-full rounded-2xl border border-white/10 bg-zinc-950/60 p-6 flex flex-col">
+          <div className="h-full min-h-0 rounded-2xl border border-white/10 bg-zinc-950/60 p-6 flex flex-col">
             {/* Header */}
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -634,7 +686,7 @@ export function PortfolioView(): JSX.Element {
             </div>
 
             {/* Operations list */}
-            <div className="mt-6 flex-1 min-h-0 rounded-2xl border border-white/10 bg-black/20">
+            <div className="mt-6 flex-1 min-h-0 rounded-2xl border border-white/10 bg-black/20 flex flex-col">
               <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
                 <div>
                   <div className="font-medium">Operations</div>
@@ -642,7 +694,7 @@ export function PortfolioView(): JSX.Element {
                 </div>
               </div>
 
-              <div className="p-3 h-full overflow-y-auto space-y-2">
+              <div className="p-3 flex-1 min-h-0 overflow-y-auto space-y-2">
                 {activeTx.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-zinc-400 text-sm">
                     No operations yet. Add one to see it here.
@@ -720,6 +772,191 @@ export function PortfolioView(): JSX.Element {
           </div>
         )}
       </section>
+
+      <Modal
+        open={importOpen}
+        onClose={() => {
+          if (importBusy) return;
+          setImportOpen(false);
+          setImportErr(null);
+          setImportKey("");
+          setImportSecret("");
+        }}
+        title="Import from Bybit"
+        primaryLabel={importBusy ? "Importing…" : "Import"}
+        onPrimary={async () => {
+          if (!id) return;
+          if (!importKey.trim() || !importSecret.trim()) {
+            setImportErr("API key and secret are required");
+            return;
+          }
+
+          try {
+            setImportBusy(true);
+            setImportErr(null);
+
+            await importBybitKeys(id, {
+              api_key: importKey.trim(),
+              api_secret: importSecret.trim(),
+            });
+
+            // рефетчим assets + портфель
+            const [p, a] = await Promise.all([getPortfolio(id), listAssets(id)]);
+            setPortfolioTitle(p.name);
+            setVis((p.visibility ?? "private") as Visibility);
+
+            const ui: UiAsset[] = a.map((x: AssetSummary) => ({
+              id: x.id,
+              symbol: x.symbol,
+              name: x.display_name || x.symbol,
+              icon: pickIcon(x.symbol, x.emoji),
+            }));
+            setAssets(ui);
+
+            // обновим операции (если активный ассет не менялся)
+            setTxRefresh((x) => x + 1);
+
+            // если вообще ничего не выбрано — выберем первое
+            if (!active && ui.length) setActive(ui[0].id);
+
+            setImportOpen(false);
+            setImportKey("");
+            setImportSecret("");
+          } catch (e: any) {
+            setImportErr(e?.message ?? "Import failed");
+          } finally {
+            setImportBusy(false);
+          }
+        }}
+      >
+        {importErr && <div className="text-sm text-red-400">{importErr}</div>}
+
+        <div className="space-y-3">
+          <label className="block">
+            <div className="text-xs text-zinc-400 mb-1">API Key</div>
+            <input
+              className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 outline-none"
+              value={importKey}
+              onChange={(e) => setImportKey(e.target.value)}
+              disabled={importBusy}
+              autoComplete="off"
+            />
+          </label>
+
+          <label className="block">
+            <div className="text-xs text-zinc-400 mb-1">API Secret</div>
+            <input
+              type="password"
+              className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 outline-none"
+              value={importSecret}
+              onChange={(e) => setImportSecret(e.target.value)}
+              disabled={importBusy}
+              autoComplete="off"
+            />
+          </label>
+
+          <div className="text-xs text-zinc-400">
+            Keys are used only to fetch balances and are not stored.
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={settingsOpen}
+        onClose={() => {
+          if (settingsBusy) return;
+          setSettingsOpen(false);
+          setSettingsErr(null);
+          setCopied(false);
+        }}
+        title="Portfolio settings"
+        primaryLabel={settingsBusy ? "Saving…" : "Save"}
+        onPrimary={async () => {
+          if (!id) return;
+          try {
+            setSettingsBusy(true);
+            setSettingsErr(null);
+
+            const updated = await updatePortfolio(id, { visibility: vis });
+            setVis((updated.visibility ?? "private") as Visibility);
+
+            setSettingsOpen(false);
+          } catch (e: any) {
+            setSettingsErr(e?.message ?? "Failed to save");
+          } finally {
+            setSettingsBusy(false);
+          }
+        }}
+      >
+        {settingsErr && <div className="text-sm text-red-400">{settingsErr}</div>}
+
+        <div className="space-y-2">
+          <div className="text-sm text-zinc-300">Portfolio ID</div>
+
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              value={id ?? ""}
+              className="flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-200 outline-none"
+            />
+            <Button
+              variant="outline"
+              disabled={!id}
+              onClick={async () => {
+                if (!id) return;
+                try {
+                  await navigator.clipboard.writeText(id);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1200);
+                } catch {
+                  // fallback если clipboard недоступен (редко)
+                  prompt("Copy this ID:", id);
+                }
+              }}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+
+          <div className="text-xs text-zinc-400">
+            Share this ID. If the portfolio is Public, others can import it via Subscribe.
+          </div>
+        </div>
+
+        <div className="my-2 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+        <div className="space-y-3">
+          <div className="text-sm text-zinc-300">Visibility</div>
+
+          <div className="flex items-center gap-4">
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="vis"
+                checked={vis === "private"}
+                onChange={() => setVis("private")}
+                disabled={settingsBusy}
+              />
+              Private
+            </label>
+
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="vis"
+                checked={vis === "public"}
+                onChange={() => setVis("public")}
+                disabled={settingsBusy}
+              />
+              Public
+            </label>
+          </div>
+
+          <div className="text-xs text-zinc-400">
+            Public portfolios can be imported by ID. Private portfolios are visible only to you.
+          </div>
+        </div>
+      </Modal>
 
       {txModalOpen && (
         <div className="fixed inset-0 z-50">

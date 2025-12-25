@@ -35,7 +35,7 @@ class BybitTicker(BaseModel):
     usdIndexPrice: Optional[str] = None
 
 
-def _fetch_ticker(category: str, symbol: str) -> Optional[BybitTicker]:
+def fetch_ticker(category: str, symbol: str) -> Optional[BybitTicker]:
     key = (category, symbol)
     now = time.time()
 
@@ -89,13 +89,13 @@ def bybit_ticker(
 
     symbol = f"{base}{quote}"  # PEPE + USDT => PEPEUSDT
 
-    t = _fetch_ticker(category, symbol)
+    t = fetch_ticker(category, symbol)
     if t:
         return t
 
     # часто монета есть только в перпах: попробуем linear как fallback
     if fallback_linear and category != "linear":
-        t = _fetch_ticker("linear", symbol)
+        t = fetch_ticker("linear", symbol)
         if t:
             return t
 

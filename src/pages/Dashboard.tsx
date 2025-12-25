@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Home } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import { clearAccessToken, isAuthError } from "@/Api";
 
 // === API ===
 import {
   listPortfolios,
   createPortfolio,
+  importPortfolio,
   type PortfolioSummary as SPortfolioSummary,
   type PortfolioDetail as SPortfolioDetail,
   type Visibility,
@@ -64,7 +66,12 @@ export default function Dashboard(): JSX.Element {
         const data = await listPortfolios();
         if (!cancelled) setItems(data.map(mapSummary));
       } catch (e: any) {
-        if (!cancelled) setErr(e?.message ?? "Failed to load");
+        if (isAuthError(e)) {
+          clearAccessToken();
+          nav("/", { replace: true });
+          return;
+        }
+        setErr(e?.message ?? "Failed to load");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -196,21 +203,15 @@ export default function Dashboard(): JSX.Element {
             alert(e?.message ?? "Failed to create");
           }
         }}
-        onSubscribe={(guid) => {
-          // оставляем мок подписки на ЛР-3
-          const id = `s-${guid.slice(0, 6)}`;
-          setItems((prev) => [
-            {
-              id,
-              name: `Subscribed ${guid.slice(0, 6)}`,
-              emoji: "⭐",
-              balance: 0,
-              pnlDay: 0,
-              kind: "subscribed",
-            },
-            ...prev,
-          ]);
-          setOpenAdd(false);
+        onSubscribe={async (guid) => {
+          try {
+            const created = await importPortfolio(guid as any);
+            const ui = mapSummary(created);
+            setItems((prev) => [ui, ...prev]);
+            setOpenAdd(false);
+          } catch (e: any) {
+            alert(e?.message ?? "Failed to import");
+          }
         }}
       />
     </div>
