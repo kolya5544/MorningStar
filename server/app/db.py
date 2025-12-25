@@ -1,28 +1,22 @@
 # app/db.py
 from __future__ import annotations
 
-from pathlib import Path
+import os
 from typing import Generator
 
-from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 
-DB_PATH = Path(__file__).resolve().parents[1] / "morningstar.sqlite"  # server/morningstar.sqlite
-DATABASE_URL = f"sqlite:///{DB_PATH}"
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://postgres:postgres@localhost:5432/morningstar",
+)
 
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},
     future=True,
+    pool_pre_ping=True,
 )
-
-@event.listens_for(Engine, "connect")
-def _set_sqlite_pragma(dbapi_connection, _):
-    # включаем foreign keys в sqlite (иначе CASCADE не работает)
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
