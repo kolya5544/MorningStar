@@ -22,7 +22,18 @@ class TxType(str, Enum):
     transfer_in = "transfer_in"
     transfer_out = "transfer_out"
 
+class Role(str, Enum):
+    """User roles used for access control.
+
+    - user: regular account owner who can create and manage their own data.
+    - manager: may view all portfolios but cannot modify them.
+    - admin: has full privileges including managing other users.
+    """
+
+    user = "user"
+    manager = "manager"
+    admin = "admin"
+
 class ApiError(BaseModel):
     code: str
     message: str
-

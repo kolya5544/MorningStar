@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import { PortfolioView } from "@/pages/PortfolioView";
+import ControlPanel from "@/pages/ControlPanel";
 import { RequireAuth } from "@/components/RequireAuth";
 
 export default function App() {
@@ -21,6 +22,14 @@ export default function App() {
         element={
           <RequireAuth>
             <PortfolioView />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/control-panel"
+        element={
+          <RequireAuth allowedRoles={["manager", "admin"]}>
+            <ControlPanel />
           </RequireAuth>
         }
       />

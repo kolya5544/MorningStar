@@ -1,4 +1,12 @@
-# app/auth.py
+"""Authentication helpers for MorningStar.
+
+This module provides password hashing, JSON Web Token (JWT) utilities
+and FastAPI dependencies for authenticating and authorising users.
+It extends the existing implementation to carry the user's ``role`` in
+the JWT payload and provides helper functions for role‑based access
+control (RBAC).
+"""
+
 from __future__ import annotations
 
 import base64
@@ -12,11 +20,12 @@ import string
 import time
 from dataclasses import dataclass
 from email.message import EmailMessage
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from fastapi import HTTPException, Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.models.common import Role
 
 # ===== Password hashing (stdlib PBKDF2) =====
 _PBKDF2_ITERS = int(os.getenv("PBKDF2_ITERS", "200000"))
@@ -52,10 +61,17 @@ JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 
 
-def create_access_token(user_id: str, email: str) -> tuple[str, int]:
+def create_access_token(user_id: str, email: str, role: str) -> tuple[str, int]:
+    """Issue a JWT for ``user_id`` with an expiry and role.
+
+    The token payload includes ``sub`` (subject, the user ID), ``email``, ``role``,
+    issued at (``iat``) and expiry (``exp``) timestamps. Clients can use the
+    ``role`` claim to adapt their UI, and the backend uses it to enforce
+    RBAC via :func:`require_roles`.
+    """
     now = int(time.time())
     exp = now + JWT_EXPIRE_MINUTES * 60
-    payload = {"sub": user_id, "email": email, "iat": now, "exp": exp}
+    payload = {"sub": user_id, "email": email, "role": role, "iat": now, "exp": exp}
     token = _jwt_encode(payload, JWT_SECRET)
     return token, exp
 
@@ -63,7 +79,7 @@ def create_access_token(user_id: str, email: str) -> tuple[str, int]:
 def decode_access_token(token: str) -> Dict[str, Any]:
     payload = _jwt_decode(token, JWT_SECRET)
     # basic shape checks
-    if "sub" not in payload or "email" not in payload:
+    if "sub" not in payload or "email" not in payload or "role" not in payload:
         raise ValueError("bad token payload")
     return payload
 
@@ -107,6 +123,12 @@ def _b64url_decode(data: str) -> bytes:
 
 # ===== Middleware =====
 class AuthMiddleware(BaseHTTPMiddleware):
+    """Attach decoded token payload (if present) to ``request.state.user``.
+
+    If the token is missing or invalid, ``request.state.user`` remains ``None``.
+    If the token is invalid, an error string is stored in ``request.state.auth_error``.
+    """
+
     async def dispatch(self, request: Request, call_next):
         request.state.user = None
         request.state.auth_error = None
@@ -123,6 +145,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 def require_user(request: Request) -> Dict[str, Any]:
+    """Ensure that ``request.state.user`` exists and return it.
+
+    Raises ``401 Unauthorized`` if the user is missing or the token is invalid. Use
+    this dependency at the top of endpoints that require any authenticated user.
+    """
     if request.state.user is None:
         # если токен был, но плохой — даём 401
         detail = "Not authenticated"
@@ -134,6 +161,22 @@ def require_user(request: Request) -> Dict[str, Any]:
             headers={"WWW-Authenticate": "Bearer"},
         )
     return request.state.user
+
+
+def require_roles(request: Request, allowed_roles: Sequence[Role | str]) -> Dict[str, Any]:
+    """Ensure the authenticated user has one of ``allowed_roles``.
+
+    This dependency builds on :func:`require_user` and checks the ``role`` claim of
+    the JWT. It raises ``403 Forbidden`` if the role is not permitted. It returns
+    the decoded token payload when successful.
+    """
+    payload = require_user(request)
+    user_role = payload.get("role")
+    # normalise allowed_roles to strings
+    allowed = {r.value if isinstance(r, Role) else r for r in allowed_roles}
+    if user_role not in allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return payload
 
 
 # ===== SMTP (Proton SMTP Submission) =====

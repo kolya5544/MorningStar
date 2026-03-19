@@ -18,6 +18,7 @@ import {
   getBybitTicker,
   updatePortfolio,
   importBybitKeys,
+  authMe,
   type Visibility,
   type UUID,
   type AssetSummary,
@@ -25,6 +26,7 @@ import {
   type TxCreate,
   type TxType,
   type BybitTicker,
+  type Role,
 } from "@/Api";
 
 type UiAsset = { id: string; symbol: string; name: string; icon: string };
@@ -299,6 +301,9 @@ export function PortfolioView(): JSX.Element {
   const nav = useNavigate();
 
   const [portfolioTitle, setPortfolioTitle] = useState<string>(id ?? "");
+  const [role, setRole] = useState<Role | null>(null);
+  const [meId, setMeId] = useState<string | null>(null);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [assets, setAssets] = useState<UiAsset[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -335,6 +340,25 @@ export function PortfolioView(): JSX.Element {
   const [txRefresh, setTxRefresh] = useState(0);
 
   const [copied, setCopied] = useState(false);
+  const readOnly = role === "manager" && ownerId !== null && meId !== ownerId;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await authMe();
+        if (!cancelled) {
+          setRole(me.role);
+          setMeId(me.id);
+        }
+      } catch {
+        // ignored here; auth wrapper handles invalid sessions
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!active) {
@@ -428,6 +452,7 @@ export function PortfolioView(): JSX.Element {
         if (cancelled) return;
 
         setPortfolioTitle(p.name);
+        setOwnerId(p.owner_id ?? null);
         setVis((p.visibility ?? "private") as Visibility);
         const ui: UiAsset[] = a.map((x: AssetSummary) => ({
           id: x.id,
@@ -489,17 +514,19 @@ export function PortfolioView(): JSX.Element {
               <Home className="h-4 w-4 mr-2" /> Home
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSettingsErr(null);
-                setSettingsOpen(true);
-              }}
-              title="Portfolio settings"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
+            {!readOnly && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSettingsErr(null);
+                  setSettingsOpen(true);
+                }}
+                title="Portfolio settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
         <div className="h-px w-full bg-white/10" />
@@ -525,6 +552,7 @@ export function PortfolioView(): JSX.Element {
                   Promise.all([getPortfolio(id), listAssets(id)])
                     .then(([p, a]) => {
                       setPortfolioTitle(p.name);
+                      setOwnerId(p.owner_id ?? null);
                       setAssets(
                         a.map((x) => ({
                           id: x.id,
@@ -567,34 +595,36 @@ export function PortfolioView(): JSX.Element {
           )}
         </div>
 
-        <div className="p-2 flex gap-2">
-          <Button
-            className="flex-1"
-            variant="outline"
-            disabled={busyAdd || !id}
-            onClick={() => {
-              if (!id) return;
-              openAddAsset();
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" /> Add asset
-          </Button>
+        {!readOnly && (
+          <div className="p-2 flex gap-2">
+            <Button
+              className="flex-1"
+              variant="outline"
+              disabled={busyAdd || !id}
+              onClick={() => {
+                if (!id) return;
+                openAddAsset();
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Add asset
+            </Button>
 
-          <Button
-            variant="outline"
-            disabled={!id}
-            title="Import from Bybit"
-            onClick={() => {
-              setImportErr(null);
-              setImportKey("");
-              setImportSecret("");
-              setImportOpen(true);
-            }}
-            className="w-10 px-0"
-          >
-            <Download className="h-4 w-4" />
-          </Button>
-        </div>
+            <Button
+              variant="outline"
+              disabled={!id}
+              title="Import from Bybit"
+              onClick={() => {
+                setImportErr(null);
+                setImportKey("");
+                setImportSecret("");
+                setImportOpen(true);
+              }}
+              className="w-10 px-0"
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </aside>
 
       {/* Main panel */}
@@ -649,8 +679,9 @@ export function PortfolioView(): JSX.Element {
                     if (!id || !activeAsset) return;
                     openCreateTx();
                   }}
+                  disabled={readOnly}
                 >
-                  + Operation
+                  {readOnly ? "Read only" : "+ Operation"}
                 </Button>
               </div>
             </div>
@@ -729,40 +760,42 @@ export function PortfolioView(): JSX.Element {
                         ) : (
                           <div className="text-xs text-zinc-500">—</div>
                         )}
-                        <div className="flex items-center justify-end gap-2 mt-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEditTx(t)}
-                            title="Edit"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                        {!readOnly && (
+                          <div className="flex items-center justify-end gap-2 mt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditTx(t)}
+                              title="Edit"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
 
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={async () => {
-                              if (!id || !activeAsset) return;
-                              if (!confirm("Delete this transaction?")) return;
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                if (!id || !activeAsset) return;
+                                if (!confirm("Delete this transaction?")) return;
 
-                              try {
-                                await deleteTransaction(id, t.id);
-                                setTxByAsset((prev) => ({
-                                  ...prev,
-                                  [activeAsset.id]: (prev[activeAsset.id] ?? []).filter(
-                                    (x) => x.id !== t.id,
-                                  ),
-                                }));
-                              } catch (e: any) {
-                                alert(e?.message ?? "Failed to delete transaction");
-                              }
-                            }}
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                                try {
+                                  await deleteTransaction(id, t.id);
+                                  setTxByAsset((prev) => ({
+                                    ...prev,
+                                    [activeAsset.id]: (prev[activeAsset.id] ?? []).filter(
+                                      (x) => x.id !== t.id,
+                                    ),
+                                  }));
+                                } catch (e: any) {
+                                  alert(e?.message ?? "Failed to delete transaction");
+                                }
+                              }}
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
@@ -803,6 +836,7 @@ export function PortfolioView(): JSX.Element {
             // рефетчим assets + портфель
             const [p, a] = await Promise.all([getPortfolio(id), listAssets(id)]);
             setPortfolioTitle(p.name);
+            setOwnerId(p.owner_id ?? null);
             setVis((p.visibility ?? "private") as Visibility);
 
             const ui: UiAsset[] = a.map((x: AssetSummary) => ({
