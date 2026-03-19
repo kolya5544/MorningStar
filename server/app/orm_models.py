@@ -1,4 +1,11 @@
-# app/orm_models.py
+"""Database ORM models.
+
+This module defines SQLAlchemy ORM models for users, portfolios, assets and transactions.
+It extends the existing data model with a ``role`` attribute on ``UserORM`` to support
+role‑based access control (RBAC). Users may be ``user`` (default), ``manager`` or
+``admin``, as defined in :class:`app.models.common.Role`.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -11,19 +18,28 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-from app.models.common import Visibility, PortfolioKind, TxType
+from app.models.common import Visibility, PortfolioKind, TxType, Role
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 class UserORM(Base):
+    """User model.
+
+    Each user has a globally unique ``id``, an ``email``, a ``password_hash`` and
+    a ``role``. The ``role`` controls access to API endpoints according to the RBAC
+    rules implemented in the application. By default new users are assigned the
+    ``Role.user`` role.
+    """
+
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    role: Mapped[Role] = mapped_column(SAEnum(Role), nullable=False, default=Role.user)
 
     portfolios: Mapped[list["PortfolioORM"]] = relationship(
         back_populates="owner",

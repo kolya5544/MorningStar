@@ -1,4 +1,5 @@
-// Api.tsx
+// Api.tsx – API client for the MorningStar frontend
+
 const BASE = "/api";
 
 const TOKEN_KEY = "ms_access_token";
@@ -21,21 +22,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers || undefined);
   headers.set("accept", "application/json");
   headers.set("content-type", "application/json");
-
   const token = getAccessToken();
   if (token) headers.set("authorization", `Bearer ${token}`);
-
   const r = await fetch(`${BASE}${path}`, { ...init, headers });
-
   if (!r.ok) {
     let msg = `${r.status} ${r.statusText}`;
     try {
       const j = await r.json();
-      msg = j?.detail || j?.message || msg;
+      msg = (j as any)?.detail || (j as any)?.message || msg;
     } catch {}
     throw new ApiHttpError(msg, r.status);
   }
-
   return r.status === 204 ? (undefined as T) : await r.json();
 }
 
@@ -52,11 +49,12 @@ export type PortfolioSummary = {
   pnl_day_usd: string;
   kind: PortfolioKind;
   visibility?: Visibility | null;
+  owner_id?: UUID | null;
+  owner_email?: string | null;
 };
 export type PortfolioDetail = PortfolioSummary & { created_at: string };
 
 export type PortfolioCreate = { name: string; emoji?: string | null; visibility: Visibility };
-
 export type PortfolioUpdate = {
   name?: string | null;
   emoji?: string | null;
@@ -105,75 +103,49 @@ export type BybitKeysImportRequest = {
   api_secret: string;
 };
 
+// Role returned by backend
+export type Role = "user" | "manager" | "admin";
+
 /* ===== API calls ===== */
 // health
 export const apiHealth = () => request<{ status: string }>("/health");
 
 // portfolios
 export const listPortfolios = () => request<PortfolioSummary[]>("/v1/portfolios");
-export const createPortfolio = (b: PortfolioCreate) =>
-  request<PortfolioDetail>("/v1/portfolios", { method: "POST", body: JSON.stringify(b) });
+export const createPortfolio = (b: PortfolioCreate) => request<PortfolioDetail>("/v1/portfolios", { method: "POST", body: JSON.stringify(b) });
 export const getPortfolio = (pid: UUID) => request<PortfolioDetail>(`/v1/portfolios/${pid}`);
-export const deletePortfolio = (pid: UUID) =>
-  request<void>(`/v1/portfolios/${pid}`, { method: "DELETE" });
+export const deletePortfolio = (pid: UUID) => request<void>(`/v1/portfolios/${pid}`, { method: "DELETE" });
 export const importPortfolio = (sourceId: UUID) =>
-  request<PortfolioDetail>("/v1/portfolios/import", {
-    method: "POST",
-    body: JSON.stringify({ source_id: sourceId }),
-  });
+  request<PortfolioDetail>("/v1/portfolios/import", { method: "POST", body: JSON.stringify({ source_id: sourceId }) });
 export const updatePortfolio = (pid: UUID, b: PortfolioUpdate) =>
-  request<PortfolioDetail>(`/v1/portfolios/${pid}`, {
-    method: "PUT",
-    body: JSON.stringify(b),
-  });
-export async function importBybitKeys(pid: UUID, body: BybitKeysImportRequest) {
-  return request<PortfolioDetail>(`/v1/portfolios/${pid}/import/bybit`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
+  request<PortfolioDetail>(`/v1/portfolios/${pid}`, { method: "PUT", body: JSON.stringify(b) });
+export const importBybitKeys = (pid: UUID, body: BybitKeysImportRequest) =>
+  request<PortfolioDetail>(`/v1/portfolios/${pid}/import/bybit`, { method: "POST", body: JSON.stringify(body) });
 
 // assets
 export const listAssets = (pid: UUID) => request<AssetSummary[]>(`/v1/portfolios/${pid}/assets`);
 export const addAsset = (pid: UUID, b: AssetCreate) =>
-  request<AssetSummary>(`/v1/portfolios/${pid}/assets`, {
-    method: "POST",
-    body: JSON.stringify(b),
-  });
+  request<AssetSummary>(`/v1/portfolios/${pid}/assets`, { method: "POST", body: JSON.stringify(b) });
 
 // transactions
 export const listTransactions = (pid: UUID, assetId?: UUID) =>
   request<TxItem[]>(`/v1/portfolios/${pid}/transactions${assetId ? `?asset_id=${assetId}` : ""}`);
-
 export const addTransaction = (pid: UUID, b: TxCreate) =>
-  request<TxItem>(`/v1/portfolios/${pid}/transactions`, {
-    method: "POST",
-    body: JSON.stringify(b),
-  });
-
+  request<TxItem>(`/v1/portfolios/${pid}/transactions`, { method: "POST", body: JSON.stringify(b) });
 export const updateTransaction = (pid: UUID, tid: UUID, b: TxCreate) =>
-  request<TxItem>(`/v1/portfolios/${pid}/transactions/${tid}`, {
-    method: "PUT",
-    body: JSON.stringify(b),
-  });
-
+  request<TxItem>(`/v1/portfolios/${pid}/transactions/${tid}`, { method: "PUT", body: JSON.stringify(b) });
 export const deleteTransaction = (pid: UUID, tid: UUID) =>
   request<void>(`/v1/portfolios/${pid}/transactions/${tid}`, { method: "DELETE" });
 
 // timeseries
-export const getTimeseries = (pid: UUID, days = 14) =>
-  request<TimeseriesResponse>(`/v1/portfolios/${pid}/timeseries?days=${days}`);
+export const getTimeseries = (pid: UUID, days = 14) => request<TimeseriesResponse>(`/v1/portfolios/${pid}/timeseries?days=${days}`);
 
 // integrations
-export const importWallet = (b: WalletImportRequest) =>
-  request<ImportJob>("/v1/import/wallet", { method: "POST", body: JSON.stringify(b) });
+export const importWallet = (b: WalletImportRequest) => request<ImportJob>("/v1/import/wallet", { method: "POST", body: JSON.stringify(b) });
 export const importWalletStatus = (jobId: UUID) => request<ImportJob>(`/v1/import/wallet/${jobId}`);
-
 export const listExchanges = () => request<any[]>("/v1/integrations/exchanges");
-export const connectExchange = (b: ExchangeConnectRequest) =>
-  request<any>("/v1/integrations/exchanges", { method: "POST", body: JSON.stringify(b) });
-export const deleteExchange = (connId: string) =>
-  request<void>(`/v1/integrations/exchanges/${connId}`, { method: "DELETE" });
+export const connectExchange = (b: ExchangeConnectRequest) => request<any>("/v1/integrations/exchanges", { method: "POST", body: JSON.stringify(b) });
+export const deleteExchange = (connId: string) => request<void>(`/v1/integrations/exchanges/${connId}`, { method: "DELETE" });
 
 export type BybitTicker = {
   category: string;
@@ -191,26 +163,18 @@ export type BybitTicker = {
   volume24h: string;
   usdIndexPrice?: string | null;
 };
-
-export const getBybitTicker = (base: string, category = "spot") =>
-  request<BybitTicker>(
-    `/v1/market/bybit/ticker/${encodeURIComponent(base)}?category=${encodeURIComponent(category)}`,
-  );
+export const getBybitTicker = (base: string, category = "spot") => request<BybitTicker>(`/v1/market/bybit/ticker/${encodeURIComponent(base)}?category=${encodeURIComponent(category)}`);
 
 export type AuthRegisterResponse = { ok: boolean };
 export type AuthTokenResponse = { access_token: string; token_type: string; expires_in: number };
-export type AuthMe = { id: string; email: string };
+export type AuthMe = { id: string; email: string; role: Role };
+export type UserListItem = { id: string; email: string; role: Role; created_at: string };
+export type UpdateRoleRequest = { role: Role };
 
-export const authRegister = (email: string) =>
-  request<AuthRegisterResponse>("/v1/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ email }),
-  });
-
+export const authRegister = (email: string) => request<AuthRegisterResponse>("/v1/auth/register", { method: "POST", body: JSON.stringify({ email }) });
 export const authLogin = (email: string, password: string) =>
-  request<AuthTokenResponse>("/v1/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-
+  request<AuthTokenResponse>("/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 export const authMe = () => request<AuthMe>("/v1/auth/me");
+export const listUsers = () => request<UserListItem[]>("/v1/auth/users");
+export const updateUserRole = (userId: string, body: UpdateRoleRequest) =>
+  request<AuthMe>(`/v1/auth/users/${userId}/role`, { method: "PATCH", body: JSON.stringify(body) });

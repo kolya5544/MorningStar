@@ -1,12 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Home } from "lucide-react";
+import { Plus, Home, LogOut, Shield } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
-import { clearAccessToken, isAuthError } from "@/Api";
-
-// === API ===
+import { clearAccessToken, isAuthError, authMe, type Role } from "@/Api";
 import {
   listPortfolios,
   createPortfolio,
@@ -14,14 +12,14 @@ import {
   type PortfolioSummary as SPortfolioSummary,
   type PortfolioDetail as SPortfolioDetail,
   type Visibility,
-} from "@/Api"; // твой Api.tsx
+} from "@/Api";
 
 export type Portfolio = {
   id: string;
   name: string;
-  emoji: string; // up to 3 emojis
-  balance: number; // USD
-  pnlDay: number; // USD
+  emoji: string;
+  balance: number;
+  pnlDay: number;
   kind: "personal" | "subscribed";
   visibility?: "public" | "private";
 };
@@ -34,46 +32,38 @@ function fmtMoney(v: number) {
   }).format(v);
 }
 
-// server -> ui
 function mapSummary(p: SPortfolioSummary): Portfolio {
   return {
     id: p.id,
     name: p.name,
-    emoji: p.emoji ?? "📦",
+    emoji: p.emoji ?? "[P]",
     balance: Number(p.balance_usd ?? "0"),
     pnlDay: Number(p.pnl_day_usd ?? "0"),
-    kind: p.kind, // "personal" | "subscribed"
+    kind: p.kind,
     visibility: p.visibility ?? undefined,
   };
 }
 
 export default function Dashboard(): JSX.Element {
   const nav = useNavigate();
-
   const [items, setItems] = useState<Portfolio[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-
   const [openAdd, setOpenAdd] = useState(false);
+  const [role, setRole] = useState<Role | null>(null);
+  const [meId, setMeId] = useState<string | null>(null);
 
-  // load from API once
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        setLoading(true);
-        setErr(null);
-        const data = await listPortfolios();
-        if (!cancelled) setItems(data.map(mapSummary));
-      } catch (e: any) {
-        if (isAuthError(e)) {
-          clearAccessToken();
-          nav("/", { replace: true });
-          return;
+        const me = await authMe();
+        if (!cancelled) {
+          setRole(me.role);
+          setMeId(me.id);
         }
-        setErr(e?.message ?? "Failed to load");
-      } finally {
-        if (!cancelled) setLoading(false);
+      } catch {
+        // Ignore; auth failures are handled by portfolio loading below.
       }
     })();
     return () => {
@@ -81,9 +71,61 @@ export default function Dashboard(): JSX.Element {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setErr(null);
+        const data = await listPortfolios();
+        if (!cancelled) {
+          const filtered =
+            role === "manager" && meId ? data.filter((p) => p.owner_id === meId) : data;
+          setItems(filtered.map(mapSummary));
+        }
+      } catch (e: any) {
+        if (isAuthError(e)) {
+          clearAccessToken();
+          nav("/", { replace: true });
+          return;
+        }
+        if (!cancelled) setErr(e?.message ?? "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [nav, role, meId]);
+
+  const reloadPortfolios = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const data = await listPortfolios();
+      const filtered =
+        role === "manager" && meId ? data.filter((p) => p.owner_id === meId) : data;
+      setItems(filtered.map(mapSummary));
+    } catch (e: any) {
+      if (isAuthError(e)) {
+        clearAccessToken();
+        nav("/", { replace: true });
+        return;
+      }
+      setErr(e?.message ?? "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = () => {
+    clearAccessToken();
+    nav("/", { replace: true });
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Header */}
       <header className="sticky top-0 z-20 w-full backdrop-blur bg-black/30">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
@@ -94,10 +136,23 @@ export default function Dashboard(): JSX.Element {
                 className="h-8 w-8 shrink-0 align-middle"
               />
               <span className="text-lg font-semibold tracking-wide">MorningStar</span>
+              {role && role !== "user" && (
+                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs uppercase tracking-wide text-zinc-300">
+                  {role}
+                </span>
+              )}
             </div>
             <nav className="flex items-center gap-2">
               <Button variant="outline" onClick={() => nav("/dashboard")}>
                 <Home className="mr-2 h-4 w-4" /> Home
+              </Button>
+              {(role === "manager" || role === "admin") && (
+                <Button variant="outline" onClick={() => nav("/control-panel")}>
+                  <Shield className="mr-2 h-4 w-4" /> Control Panel
+                </Button>
+              )}
+              <Button variant="outline" onClick={logout}>
+                <LogOut className="mr-2 h-4 w-4" /> Logout
               </Button>
             </nav>
           </div>
@@ -105,22 +160,22 @@ export default function Dashboard(): JSX.Element {
         <div className="h-px w-full bg-gradient-to-r from-transparent via-[#16335f] to-transparent opacity-50" />
       </header>
 
-      {/* Home grid */}
-      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
-        <div className="flex items-center justify-between mb-6">
+      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Your portfolios</h1>
-          <Button onClick={() => setOpenAdd(true)}>
-            <Plus className="h-4 w-4 mr-2" /> New portfolio
-          </Button>
+          {role && (
+            <Button onClick={() => setOpenAdd(true)}>
+              <Plus className="mr-2 h-4 w-4" /> New portfolio
+            </Button>
+          )}
         </div>
 
-        {/* states */}
         {loading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-white/10 bg-zinc-950/80 p-4 animate-pulse h-[140px]"
+                className="h-[140px] rounded-2xl border border-white/10 bg-zinc-950/80 p-4 animate-pulse"
               />
             ))}
           </div>
@@ -129,17 +184,7 @@ export default function Dashboard(): JSX.Element {
         {!loading && err && (
           <div className="text-sm text-red-400">
             {err}{" "}
-            <button
-              className="underline decoration-dotted"
-              onClick={() => {
-                setLoading(true);
-                setErr(null);
-                listPortfolios()
-                  .then((d) => setItems(d.map(mapSummary)))
-                  .catch((e) => setErr(e?.message ?? "Failed to load"))
-                  .finally(() => setLoading(false));
-              }}
-            >
+            <button className="underline decoration-dotted" onClick={() => void reloadPortfolios()}>
               retry
             </button>
           </div>
@@ -150,23 +195,23 @@ export default function Dashboard(): JSX.Element {
         )}
 
         {!loading && !err && items.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 place-items-stretch">
+          <div className="grid grid-cols-1 gap-4 place-items-stretch sm:grid-cols-2 lg:grid-cols-3">
             {items.map((p) => (
               <button
                 key={p.id}
                 onClick={() => nav(`/dashboard/${p.id}`)}
-                className="group text-left rounded-2xl border border-white/10 bg-zinc-950/80 p-4 hover:bg-white/5 transition flex flex-col"
+                className="group flex flex-col rounded-2xl border border-white/10 bg-zinc-950/80 p-4 text-left transition hover:bg-white/5"
               >
                 <div className="flex items-start justify-between">
                   <div className="text-2xl leading-none" aria-hidden>
                     {p.emoji}
                   </div>
-                  <span className="text-xs rounded-full px-2 py-0.5 bg-white/5 border border-white/10 text-zinc-300">
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-zinc-300">
                     {p.kind}
-                    {p.kind === "personal" && p.visibility ? ` · ${p.visibility}` : ""}
+                    {p.kind === "personal" && p.visibility ? ` - ${p.visibility}` : ""}
                   </span>
                 </div>
-                <div className="mt-3 font-medium text-base line-clamp-1">{p.name}</div>
+                <div className="mt-3 line-clamp-1 text-base font-medium">{p.name}</div>
                 <div className="mt-1 text-sm text-zinc-400">{fmtMoney(p.balance)}</div>
                 <div
                   className={`mt-4 text-sm font-medium ${
@@ -182,45 +227,33 @@ export default function Dashboard(): JSX.Element {
         )}
       </main>
 
-      {/* Create / Subscribe modal */}
       <AddPortfolioModal
         open={openAdd}
         onClose={() => setOpenAdd(false)}
         onCreate={async (data) => {
-          // POST /api/v1/portfolios
-          try {
-            const created: SPortfolioDetail = await createPortfolio({
-              name: data.name,
-              emoji: data.emoji,
-              visibility: data.visibility as Visibility,
-            });
-            const ui = mapSummary(created);
-            setItems((prev) => [ui, ...prev]);
-            setOpenAdd(false);
-            // по желанию: перейти сразу в портфель
-            // nav(`/dashboard/${created.id}`);
-          } catch (e: any) {
-            alert(e?.message ?? "Failed to create");
-          }
+          const created: SPortfolioDetail = await createPortfolio({
+            name: data.name,
+            emoji: data.emoji,
+            visibility: data.visibility as Visibility,
+          });
+          setItems((prev) => [mapSummary(created), ...prev]);
+          setOpenAdd(false);
         }}
-        onSubscribe={async (guid) => {
-          try {
-            const created = await importPortfolio(guid as any);
-            const ui = mapSummary(created);
-            setItems((prev) => [ui, ...prev]);
-            setOpenAdd(false);
-          } catch (e: any) {
-            alert(e?.message ?? "Failed to import");
-          }
+        onSubscribe={async (portfolioId) => {
+          const created = await importPortfolio(portfolioId);
+          setItems((prev) => [mapSummary(created), ...prev]);
+          setOpenAdd(false);
         }}
       />
     </div>
   );
 }
 
-// ---------------------- AddPortfolioModal ----------------------
-
-type CreatePayload = { name: string; emoji?: string; visibility: "public" | "private" };
+type CreatePayload = {
+  name: string;
+  emoji?: string;
+  visibility: "public" | "private";
+};
 
 function AddPortfolioModal({
   open,
@@ -231,63 +264,86 @@ function AddPortfolioModal({
   open: boolean;
   onClose: () => void;
   onCreate: (data: CreatePayload) => void | Promise<void>;
-  onSubscribe: (guid: string) => void | Promise<void>;
+  onSubscribe: (portfolioId: string) => void | Promise<void>;
 }) {
   const [tab, setTab] = useState<"create" | "subscribe">("create");
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("");
   const [visibility, setVisibility] = useState<"public" | "private">("private");
-  const [guid, setGuid] = useState("");
+  const [portfolioId, setPortfolioId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const resetState = () => {
+    setName("");
+    setEmoji("");
+    setPortfolioId("");
+    setVisibility("private");
+    setTab("create");
+    setError(null);
+  };
 
   return (
     <Modal
       open={open}
       onClose={() => {
         if (busy) return;
-        setName("");
-        setEmoji("");
-        setGuid("");
-        setVisibility("private");
-        setTab("create");
+        resetState();
         onClose();
       }}
       title="New portfolio"
       onPrimary={async () => {
         if (busy) return;
-        if (tab === "create") {
+        setError(null);
+        try {
           setBusy(true);
-          await onCreate({
-            name: name.trim() || "Untitled",
-            emoji: emoji.trim(),
-            visibility,
-          });
-          setBusy(false);
-        } else if (guid.trim()) {
-          setBusy(true);
-          await onSubscribe(guid.trim());
+          if (tab === "create") {
+            await onCreate({
+              name: name.trim() || "Untitled",
+              emoji: emoji.trim() || undefined,
+              visibility,
+            });
+            resetState();
+            return;
+          }
+          if (!portfolioId.trim()) {
+            setError("Portfolio ID is required");
+            return;
+          }
+          await onSubscribe(portfolioId.trim());
+          resetState();
+        } catch (e: any) {
+          setError(e?.message ?? (tab === "create" ? "Failed to create" : "Failed to import"));
+        } finally {
           setBusy(false);
         }
       }}
-      primaryLabel={busy ? "Please wait…" : tab === "create" ? "Create" : "Subscribe"}
+      primaryLabel={busy ? "Please wait..." : tab === "create" ? "Create" : "Subscribe"}
     >
-      {/* Tabs mimic via two buttons */}
       <div className="flex gap-2">
         <Button
           variant={tab === "create" ? undefined : "outline"}
-          onClick={() => setTab("create")}
+          onClick={() => {
+            setError(null);
+            setTab("create");
+          }}
           disabled={busy}
         >
           Create
         </Button>
         <Button
           variant={tab === "subscribe" ? undefined : "outline"}
-          onClick={() => setTab("subscribe")}
+          onClick={() => {
+            setError(null);
+            setTab("subscribe");
+          }}
           disabled={busy}
         >
           Subscribe
         </Button>
       </div>
+
+      {error && <div className="text-sm text-red-400">{error}</div>}
 
       {tab === "create" ? (
         <div className="space-y-3">
@@ -305,8 +361,8 @@ function AddPortfolioModal({
             <Input
               value={emoji}
               onChange={(e) => setEmoji(e.target.value)}
-              placeholder="🚀🚀🚀"
-              maxLength={6}
+              placeholder="***"
+              maxLength={8}
               disabled={busy}
             />
           </div>
@@ -336,10 +392,10 @@ function AddPortfolioModal({
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="text-sm text-zinc-400">Paste portfolio GUID</div>
+          <div className="text-sm text-zinc-400">Paste portfolio ID</div>
           <Input
-            value={guid}
-            onChange={(e) => setGuid(e.target.value)}
+            value={portfolioId}
+            onChange={(e) => setPortfolioId(e.target.value)}
             placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
             disabled={busy}
           />

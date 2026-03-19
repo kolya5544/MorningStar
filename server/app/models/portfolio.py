@@ -20,6 +20,8 @@ class PortfolioSummary(BaseModel):
     pnl_day_usd: condecimal(max_digits=18, decimal_places=2)
     kind: PortfolioKind = PortfolioKind.personal
     visibility: Optional[Visibility]  # только для personal
+    owner_id: Optional[UUID] = None
+    owner_email: Optional[str] = None
 
 class PortfolioDetail(PortfolioSummary):
     created_at: datetime
