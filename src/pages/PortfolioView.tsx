@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Plus, Home, Trash2, Pencil } from "lucide-react";
@@ -16,8 +16,12 @@ import {
   updateTransaction,
   deleteTransaction,
   getBybitTicker,
+  listPortfolioFiles,
   updatePortfolio,
   importBybitKeys,
+  uploadPortfolioFile,
+  getPortfolioFileDownload,
+  deletePortfolioFile,
   type Visibility,
   type UUID,
   type AssetSummary,
@@ -25,6 +29,7 @@ import {
   type TxCreate,
   type TxType,
   type BybitTicker,
+  type PortfolioFileItem,
 } from "@/Api";
 import { useAuth } from "@/auth/AuthProvider";
 
@@ -162,6 +167,15 @@ function fmtUsd(x: number) {
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
+
+const ALLOWED_UPLOAD_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+  "application/json",
+]);
 
 export function PortfolioView() {
   function openAddAsset() {
@@ -305,6 +319,7 @@ export function PortfolioView() {
   const { user } = useAuth();
 
   const [portfolioTitle, setPortfolioTitle] = useState<string>(id ?? "");
+  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [assets, setAssets] = useState<UiAsset[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -338,7 +353,35 @@ export function PortfolioView() {
   const [txRefresh, setTxRefresh] = useState(0);
 
   const [copied, setCopied] = useState(false);
-  const readOnly = user?.role === "manager";
+  const readOnly = user?.role === "manager" && ownerId !== null && ownerId !== user.id;
+  const [files, setFiles] = useState<PortfolioFileItem[]>([]);
+  const [fileBusy, setFileBusy] = useState(false);
+  const [fileErr, setFileErr] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const loadFiles = useCallback(async () => {
+    if (!id) return;
+    try {
+      setFileErr(null);
+      const data = await listPortfolioFiles(id);
+      setFiles(data);
+    } catch (error: unknown) {
+      setFileErr(getErrorMessage(error, "Failed to load files"));
+    }
+  }, [id]);
+
+  async function fileToBase64(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const raw = String(reader.result ?? "");
+        const content = raw.includes(",") ? raw.split(",", 2)[1] : raw;
+        resolve(content);
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  }
 
   useEffect(() => {
     if (!active) {
@@ -432,6 +475,7 @@ export function PortfolioView() {
         if (cancelled) return;
 
         setPortfolioTitle(p.name);
+        setOwnerId(p.owner_id ?? null);
         setVis((p.visibility ?? "private") as Visibility);
         const ui: UiAsset[] = a.map((x: AssetSummary) => ({
           id: x.id,
@@ -440,6 +484,7 @@ export function PortfolioView() {
           icon: pickIcon(x.symbol, x.emoji),
         }));
         setAssets(ui);
+        void loadFiles();
       } catch (error: unknown) {
         if (!cancelled) setErr(getErrorMessage(error, "Failed to load"));
       } finally {
@@ -450,7 +495,7 @@ export function PortfolioView() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, loadFiles]);
 
   useEffect(() => {
     if (!id || !active) return;
@@ -777,6 +822,116 @@ export function PortfolioView() {
                 )}
               </div>
             </div>
+
+            <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">Attached files</div>
+                  <div className="text-xs text-zinc-400">Stored per portfolio with protected download links</div>
+                </div>
+                {!readOnly && (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept=".png,.jpg,.jpeg,.pdf,.txt,.csv,.json"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!id || !file) return;
+                        if (file.size > 5 * 1024 * 1024) {
+                          setFileErr("File exceeds 5 MB");
+                          e.target.value = "";
+                          return;
+                        }
+                        if (file.type && !ALLOWED_UPLOAD_TYPES.has(file.type)) {
+                          setFileErr("Unsupported file type");
+                          e.target.value = "";
+                          return;
+                        }
+                        try {
+                          setFileBusy(true);
+                          setFileErr(null);
+                          const content = await fileToBase64(file);
+                          const created = await uploadPortfolioFile(id, {
+                            file_name: file.name,
+                            content_type: file.type || "text/plain",
+                            content_base64: content,
+                          });
+                          setFiles((prev) => [created, ...prev]);
+                        } catch (error: unknown) {
+                          setFileErr(getErrorMessage(error, "Failed to upload file"));
+                        } finally {
+                          setFileBusy(false);
+                          e.target.value = "";
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={fileBusy}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {fileBusy ? "Uploading..." : "Upload file"}
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {fileErr && <div className="mt-3 text-sm text-red-400">{fileErr}</div>}
+
+              <div className="mt-4 space-y-2">
+                {files.length === 0 && <div className="text-sm text-zinc-400">No attached files.</div>}
+                {files.map((file) => (
+                  <div
+                    key={file.id}
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">{file.original_name}</div>
+                      <div className="text-xs text-zinc-400">
+                        {file.content_type} · {(file.size_bytes / 1024).toFixed(1)} KB
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          if (!id) return;
+                          try {
+                            const result = await getPortfolioFileDownload(id, file.id);
+                            window.open(result.download_url, "_blank", "noopener,noreferrer");
+                          } catch (error: unknown) {
+                            setFileErr(getErrorMessage(error, "Failed to prepare download"));
+                          }
+                        }}
+                      >
+                        Download
+                      </Button>
+                      {!readOnly && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            if (!id) return;
+                            try {
+                              await deletePortfolioFile(id, file.id);
+                              setFiles((prev) => prev.filter((item) => item.id !== file.id));
+                            } catch (error: unknown) {
+                              setFileErr(getErrorMessage(error, "Failed to delete file"));
+                            }
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </section>
@@ -811,6 +966,7 @@ export function PortfolioView() {
             // рефетчим assets + портфель
             const [p, a] = await Promise.all([getPortfolio(id), listAssets(id)]);
             setPortfolioTitle(p.name);
+            setOwnerId(p.owner_id ?? null);
             setVis((p.visibility ?? "private") as Visibility);
 
             const ui: UiAsset[] = a.map((x: AssetSummary) => ({
@@ -886,6 +1042,8 @@ export function PortfolioView() {
             setSettingsErr(null);
 
             const updated = await updatePortfolio(id, { visibility: vis });
+            setPortfolioTitle(updated.name);
+            setOwnerId(updated.owner_id ?? null);
             setVis((updated.visibility ?? "private") as Visibility);
 
             setSettingsOpen(false);

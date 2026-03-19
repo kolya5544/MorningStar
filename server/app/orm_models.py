@@ -79,6 +79,11 @@ class PortfolioORM(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    files: Mapped[list["PortfolioFileORM"]] = relationship(
+        back_populates="portfolio",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class AssetORM(Base):
@@ -148,3 +153,28 @@ class RefreshSessionORM(Base):
     revoke_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     user: Mapped["UserORM"] = relationship(back_populates="refresh_sessions")
+
+
+class PortfolioFileORM(Base):
+    __tablename__ = "portfolio_files"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    portfolio_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("portfolios.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    uploaded_by_user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    original_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    portfolio: Mapped["PortfolioORM"] = relationship(back_populates="files")

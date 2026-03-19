@@ -163,6 +163,13 @@ export type PortfolioSummary = {
   owner_email?: string | null;
 };
 export type PortfolioDetail = PortfolioSummary & { created_at: string };
+export type PortfolioListResponse = {
+  items: PortfolioSummary[];
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+};
 
 export type PortfolioCreate = { name: string; emoji?: string | null; visibility: Visibility };
 export type PortfolioUpdate = {
@@ -213,11 +220,51 @@ export type BybitKeysImportRequest = {
   api_secret: string;
 };
 
+export type PortfolioFileItem = {
+  id: UUID;
+  portfolio_id: UUID;
+  uploaded_by_user_id: UUID;
+  original_name: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+};
+
+export type PortfolioFileUploadRequest = {
+  file_name: string;
+  content_type: string;
+  content_base64: string;
+};
+
+export type PortfolioFileDownloadResponse = {
+  download_url: string;
+  expires_at: number;
+};
+
 export type Role = "user" | "manager" | "admin";
 
 export const apiHealth = () => request<{ status: string }>("/health", {}, { retryAuth: false });
 
-export const listPortfolios = () => request<PortfolioSummary[]>("/v1/portfolios");
+export const listPortfolios = (params?: {
+  search?: string;
+  kind?: PortfolioKind | "";
+  visibility?: Visibility | "";
+  sort_by?: "created_at" | "name" | "balance_usd";
+  sort_dir?: "asc" | "desc";
+  page?: number;
+  page_size?: number;
+}) => {
+  const query = new URLSearchParams();
+  if (params?.search) query.set("search", params.search);
+  if (params?.kind) query.set("kind", params.kind);
+  if (params?.visibility) query.set("visibility", params.visibility);
+  if (params?.sort_by) query.set("sort_by", params.sort_by);
+  if (params?.sort_dir) query.set("sort_dir", params.sort_dir);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.page_size) query.set("page_size", String(params.page_size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request<PortfolioListResponse>(`/v1/portfolios${suffix}`);
+};
 export const createPortfolio = (body: PortfolioCreate) =>
   request<PortfolioDetail>("/v1/portfolios", { method: "POST", body: JSON.stringify(body) });
 export const getPortfolio = (portfolioId: UUID) => request<PortfolioDetail>(`/v1/portfolios/${portfolioId}`);
@@ -238,6 +285,17 @@ export const importBybitKeys = (portfolioId: UUID, body: BybitKeysImportRequest)
     method: "POST",
     body: JSON.stringify(body),
   });
+export const listPortfolioFiles = (portfolioId: UUID) =>
+  request<PortfolioFileItem[]>(`/v1/portfolios/${portfolioId}/files`);
+export const uploadPortfolioFile = (portfolioId: UUID, body: PortfolioFileUploadRequest) =>
+  request<PortfolioFileItem>(`/v1/portfolios/${portfolioId}/files`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+export const getPortfolioFileDownload = (portfolioId: UUID, fileId: UUID) =>
+  request<PortfolioFileDownloadResponse>(`/v1/portfolios/${portfolioId}/files/${fileId}/download`);
+export const deletePortfolioFile = (portfolioId: UUID, fileId: UUID) =>
+  request<void>(`/v1/portfolios/${portfolioId}/files/${fileId}`, { method: "DELETE" });
 
 export const listAssets = (portfolioId: UUID) =>
   request<AssetSummary[]>(`/v1/portfolios/${portfolioId}/assets`);
