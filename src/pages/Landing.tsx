@@ -1,13 +1,14 @@
-import React, { JSX, useEffect, useState } from "react"; // ← + useEffect
+import { apiHealth, authRegister } from "@/Api";
+import { useAuth } from "@/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
-import { LogIn, UserPlus } from "lucide-react";
-import { useState as useReactState } from "react"; // удалите если дублирует строку выше
-import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
-import { apiHealth, authRegister, authLogin, setAccessToken } from "@/Api";
+import { LogIn, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 
-export default function Landing(): JSX.Element {
+export default function Landing() {
+  const { isAuthenticated, signIn } = useAuth();
   const [openSignUp, setOpenSignUp] = useState(false);
   const [openLogin, setOpenLogin] = useState(false);
   const [email, setEmail] = useState("");
@@ -18,16 +19,14 @@ export default function Landing(): JSX.Element {
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginErr, setLoginErr] = useState<string | null>(null);
   const [loginHint, setLoginHint] = useState<string | null>(null);
-
   const nav = useNavigate();
 
   useEffect(() => {
-    // ← + health-check
     let stop = false;
     (async () => {
       try {
-        const r = await apiHealth();
-        if (!stop) setApiOk(r?.status?.toLowerCase?.() === "ok");
+        const health = await apiHealth();
+        if (!stop) setApiOk(health?.status?.toLowerCase?.() === "ok");
       } catch {
         if (!stop) setApiOk(false);
       }
@@ -37,9 +36,12 @@ export default function Landing(): JSX.Element {
     };
   }, []);
 
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return (
     <div className="min-h-screen bg-black text-white relative">
-      {/* BG image */}
       <div
         aria-hidden
         className="absolute inset-0 z-0 bg-center bg-cover"
@@ -48,11 +50,9 @@ export default function Landing(): JSX.Element {
       <div className="absolute inset-0 z-10 bg-black/70" />
 
       <div className="relative z-20">
-        {/* Header */}
         <header className="sticky top-0 z-20 w-full">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex h-16 items-center justify-between">
-              {/* Brand */}
               <div className="flex items-center gap-3">
                 <img
                   src="/morningstar.svg"
@@ -60,10 +60,8 @@ export default function Landing(): JSX.Element {
                   className="h-8 w-8 shrink-0 align-middle"
                 />
                 <span className="text-lg font-semibold tracking-wide">MorningStar</span>
-
-                {/* ← индикатор API */}
                 <span
-                  title={apiOk === null ? "Checking API…" : apiOk ? "API OK" : "API DOWN"}
+                  title={apiOk === null ? "Checking API..." : apiOk ? "API OK" : "API DOWN"}
                   className={`ml-3 inline-flex items-center gap-2 text-xs ${
                     apiOk === null ? "text-zinc-400" : apiOk ? "text-emerald-400" : "text-red-400"
                   }`}
@@ -77,7 +75,6 @@ export default function Landing(): JSX.Element {
                 </span>
               </div>
 
-              {/* Actions */}
               <nav className="flex items-center gap-2">
                 <Button
                   variant="ghost"
@@ -98,7 +95,6 @@ export default function Landing(): JSX.Element {
           <div className="h-px w-full bg-gradient-to-r from-transparent via-[#16335f] to-transparent opacity-50" />
         </header>
 
-        {/* Hero */}
         <main className="mx-auto flex max-w-7xl flex-col items-center px-4 py-24 sm:py-32 text-center">
           <h1 className="text-4xl font-bold sm:text-5xl md:text-6xl">Plan your future ahead!</h1>
           <p className="mt-4 max-w-2xl text-base sm:text-lg text-zinc-300">
@@ -122,7 +118,6 @@ export default function Landing(): JSX.Element {
           </div>
         </main>
 
-        {/* Sign Up modal */}
         <Modal
           open={openSignUp}
           onClose={() => {
@@ -132,25 +127,23 @@ export default function Landing(): JSX.Element {
           title="Create your account"
           onPrimary={async () => {
             if (apiOk === false) return alert("API is unavailable");
-            const em = email.trim();
-            if (!em) return;
+            const normalizedEmail = email.trim();
+            if (!normalizedEmail) return;
 
             try {
               setSignUpBusy(true);
               setSignUpErr(null);
-              await authRegister(em);
+              await authRegister(normalizedEmail);
               setOpenSignUp(false);
               setLoginHint("Password sent to your email. Use it to log in.");
               setOpenLogin(true);
-            } catch (e: any) {
-              setSignUpErr(e?.message ?? "Failed to sign up");
+            } catch (error: unknown) {
+              setSignUpErr(error instanceof Error ? error.message : "Failed to sign up");
             } finally {
               setSignUpBusy(false);
             }
           }}
-          primaryLabel={
-            signUpBusy ? "Please wait…" : apiOk === false ? "API down" : "Send password"
-          }
+          primaryLabel={signUpBusy ? "Please wait..." : apiOk === false ? "API down" : "Send password"}
         >
           {signUpErr && <div className="text-sm text-red-400">{signUpErr}</div>}
           <label className="block text-sm text-zinc-300">Email</label>
@@ -162,7 +155,6 @@ export default function Landing(): JSX.Element {
           />
         </Modal>
 
-        {/* Log In modal */}
         <Modal
           open={openLogin}
           onClose={() => {
@@ -173,23 +165,21 @@ export default function Landing(): JSX.Element {
           title="Log in"
           onPrimary={async () => {
             if (apiOk === false) return alert("API is unavailable");
-            const em = email.trim();
-            const pw = password;
-            if (!em || !pw) return;
+            const normalizedEmail = email.trim();
+            if (!normalizedEmail || !password) return;
 
             try {
               setLoginBusy(true);
               setLoginErr(null);
-              const tok = await authLogin(em, pw);
-              setAccessToken(tok.access_token);
-              nav("/dashboard");
-            } catch (e: any) {
-              setLoginErr(e?.message ?? "Failed to log in");
+              await signIn(normalizedEmail, password);
+              nav("/dashboard", { replace: true });
+            } catch (error: unknown) {
+              setLoginErr(error instanceof Error ? error.message : "Failed to log in");
             } finally {
               setLoginBusy(false);
             }
           }}
-          primaryLabel={loginBusy ? "Please wait…" : apiOk === false ? "API down" : "Continue"}
+          primaryLabel={loginBusy ? "Please wait..." : apiOk === false ? "API down" : "Continue"}
         >
           {loginHint && <div className="text-sm text-emerald-400">{loginHint}</div>}
           {loginErr && <div className="text-sm text-red-400">{loginErr}</div>}
@@ -207,7 +197,7 @@ export default function Landing(): JSX.Element {
               <label className="block text-sm text-zinc-300">Password</label>
               <Input
                 type="password"
-                placeholder="••••••••"
+                placeholder="********"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />

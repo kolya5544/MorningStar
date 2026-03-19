@@ -12,9 +12,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import (
-    String, DateTime, ForeignKey, Numeric, UniqueConstraint, Enum as SAEnum
-)
+from sqlalchemy import String, DateTime, ForeignKey, Numeric, UniqueConstraint, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -43,6 +41,11 @@ class UserORM(Base):
 
     portfolios: Mapped[list["PortfolioORM"]] = relationship(
         back_populates="owner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    refresh_sessions: Mapped[list["RefreshSessionORM"]] = relationship(
+        back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
@@ -124,3 +127,24 @@ class TxORM(Base):
     tx_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     asset: Mapped["AssetORM"] = relationship(back_populates="txs")
+
+
+class RefreshSessionORM(Base):
+    __tablename__ = "refresh_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoke_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    user: Mapped["UserORM"] = relationship(back_populates="refresh_sessions")
