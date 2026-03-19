@@ -1,8 +1,10 @@
 import {
   createPortfolio,
+  deletePortfolio,
   importPortfolio,
   isAuthError,
   listPortfolios,
+  type PortfolioKind,
   type PortfolioDetail as ServerPortfolioDetail,
   type PortfolioSummary as ServerPortfolioSummary,
   type Visibility,
@@ -11,9 +13,9 @@ import { useAuth } from "@/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
-import { Home, LogOut, Plus, Shield } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Home, LogOut, Plus, Search, Shield, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 export type Portfolio = {
   id: string;
@@ -23,6 +25,17 @@ export type Portfolio = {
   pnlDay: number;
   kind: "personal" | "subscribed";
   visibility?: "public" | "private";
+  ownerId?: string | null;
+};
+
+type DashboardFilters = {
+  search: string;
+  kind: PortfolioKind | "";
+  visibility: Visibility | "";
+  sort_by: "created_at" | "name" | "balance_usd";
+  sort_dir: "asc" | "desc";
+  page: number;
+  page_size: number;
 };
 
 function fmtMoney(value: number) {
@@ -42,23 +55,37 @@ function mapSummary(portfolio: ServerPortfolioSummary): Portfolio {
     pnlDay: Number(portfolio.pnl_day_usd ?? "0"),
     kind: portfolio.kind,
     visibility: portfolio.visibility ?? undefined,
+    ownerId: portfolio.owner_id ?? null,
   };
 }
 
 export default function Dashboard() {
   const nav = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, signOut } = useAuth();
   const [items, setItems] = useState<Portfolio[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [openAdd, setOpenAdd] = useState(false);
+  const [meta, setMeta] = useState({ page: 1, totalPages: 1, totalItems: 0 });
+
+  const filters = useMemo<DashboardFilters>(() => ({
+    search: searchParams.get("search") ?? "",
+    kind: (searchParams.get("kind") as PortfolioKind | null) ?? "",
+    visibility: (searchParams.get("visibility") as Visibility | null) ?? "",
+    sort_by: (searchParams.get("sort_by") as "created_at" | "name" | "balance_usd" | null) ?? "created_at",
+    sort_dir: (searchParams.get("sort_dir") as "asc" | "desc" | null) ?? "desc",
+    page: Number(searchParams.get("page") ?? "1") || 1,
+    page_size: Number(searchParams.get("page_size") ?? "6") || 6,
+  }), [searchParams]);
 
   const loadPortfolios = useCallback(async () => {
     try {
       setLoading(true);
       setErr(null);
-      const data = await listPortfolios();
-      setItems(data.map(mapSummary));
+      const data = await listPortfolios(filters);
+      setItems(data.items.map(mapSummary));
+      setMeta({ page: data.page, totalPages: data.total_pages, totalItems: data.total_items });
     } catch (error: unknown) {
       if (isAuthError(error)) {
         await signOut();
@@ -68,7 +95,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [signOut]);
+  }, [filters, signOut]);
 
   useEffect(() => {
     void loadPortfolios();
@@ -115,12 +142,102 @@ export default function Dashboard() {
           <h1 className="text-2xl font-semibold">
             {user?.role === "manager" ? "Available portfolios" : "Your portfolios"}
           </h1>
-          {user && user.role !== "manager" && (
+          {user && (
             <Button onClick={() => setOpenAdd(true)}>
               <Plus className="mr-2 h-4 w-4" /> New portfolio
             </Button>
           )}
         </div>
+
+        <section className="mb-6 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.6fr_repeat(4,0.8fr)]">
+            <label className="block">
+              <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Search</div>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <Input
+                  className="pl-9"
+                  value={filters.search}
+                  onChange={(e) => {
+                    const next = new URLSearchParams(searchParams);
+                    if (e.target.value) next.set("search", e.target.value);
+                    else next.delete("search");
+                    next.set("page", "1");
+                    setSearchParams(next);
+                  }}
+                  placeholder="Portfolio name or owner"
+                />
+              </div>
+            </label>
+            <label className="block">
+              <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Kind</div>
+              <select
+                className="h-10 w-full rounded-md border border-white/10 bg-black px-3 text-sm text-white outline-none"
+                value={filters.kind}
+                onChange={(e) => {
+                  const next = new URLSearchParams(searchParams);
+                  if (e.target.value) next.set("kind", e.target.value);
+                  else next.delete("kind");
+                  next.set("page", "1");
+                  setSearchParams(next);
+                }}
+              >
+                <option value="">all</option>
+                <option value="personal">personal</option>
+                <option value="subscribed">subscribed</option>
+              </select>
+            </label>
+            <label className="block">
+              <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Visibility</div>
+              <select
+                className="h-10 w-full rounded-md border border-white/10 bg-black px-3 text-sm text-white outline-none"
+                value={filters.visibility}
+                onChange={(e) => {
+                  const next = new URLSearchParams(searchParams);
+                  if (e.target.value) next.set("visibility", e.target.value);
+                  else next.delete("visibility");
+                  next.set("page", "1");
+                  setSearchParams(next);
+                }}
+              >
+                <option value="">all</option>
+                <option value="private">private</option>
+                <option value="public">public</option>
+              </select>
+            </label>
+            <label className="block">
+              <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Sort By</div>
+              <select
+                className="h-10 w-full rounded-md border border-white/10 bg-black px-3 text-sm text-white outline-none"
+                value={filters.sort_by}
+                onChange={(e) => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set("sort_by", e.target.value);
+                  setSearchParams(next);
+                }}
+              >
+                <option value="created_at">created</option>
+                <option value="name">name</option>
+                <option value="balance_usd">balance</option>
+              </select>
+            </label>
+            <label className="block">
+              <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Direction</div>
+              <select
+                className="h-10 w-full rounded-md border border-white/10 bg-black px-3 text-sm text-white outline-none"
+                value={filters.sort_dir}
+                onChange={(e) => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set("sort_dir", e.target.value);
+                  setSearchParams(next);
+                }}
+              >
+                <option value="desc">desc</option>
+                <option value="asc">asc</option>
+              </select>
+            </label>
+          </div>
+        </section>
 
         {loading && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -175,8 +292,63 @@ export default function Dashboard() {
                   {portfolio.pnlDay >= 0 ? "+" : ""}
                   {fmtMoney(portfolio.pnlDay)} today
                 </div>
+                {(user?.role === "admin" || portfolio.ownerId === user?.id) && (
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async (event) => {
+                        event.stopPropagation();
+                        if (!confirm("Delete this portfolio?")) return;
+                        try {
+                          await deletePortfolio(portfolio.id);
+                          void loadPortfolios();
+                        } catch (error: unknown) {
+                          alert(error instanceof Error ? error.message : "Failed to delete portfolio");
+                        }
+                      }}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </Button>
+                  </div>
+                )}
               </button>
             ))}
+          </div>
+        )}
+
+        {!loading && !err && (
+          <div className="mt-6 flex items-center justify-between text-sm text-zinc-400">
+            <div>
+              {meta.totalItems} item(s), page {meta.page} of {meta.totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={meta.page <= 1}
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set("page", String(Math.max(1, filters.page - 1)));
+                  setSearchParams(next);
+                }}
+              >
+                Prev
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={meta.page >= meta.totalPages}
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.set("page", String(Math.min(meta.totalPages, filters.page + 1)));
+                  setSearchParams(next);
+                }}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         )}
       </main>

@@ -37,8 +37,8 @@ export default function ControlPanel() {
       setLoading(true);
       setError(null);
 
-      const portfolioData = await listPortfolios();
-      setPortfolios(portfolioData);
+      const portfolioData = await listPortfolios({ page: 1, page_size: 50, sort_by: "created_at", sort_dir: "desc" });
+      setPortfolios(portfolioData.items);
 
       if (user?.role === "admin") {
         const userData = await listUsers();

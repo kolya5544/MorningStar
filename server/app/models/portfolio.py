@@ -25,3 +25,11 @@ class PortfolioSummary(BaseModel):
 
 class PortfolioDetail(PortfolioSummary):
     created_at: datetime
+
+
+class PortfolioListResponse(BaseModel):
+    items: list[PortfolioSummary]
+    page: int
+    page_size: int
+    total_items: int
+    total_pages: int

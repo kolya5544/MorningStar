@@ -8,6 +8,7 @@ from app.auth import AuthMiddleware, require_user
 from app.db import engine
 from app.orm_models import Base
 from app.routers.auth import router as auth_router
+from app.routers.file_downloads import router as file_downloads_router
 from app.routers.health import router as health_router
 from app.routers.integrations import router as integrations_router
 from app.routers.market import router as market_router
@@ -40,6 +41,7 @@ app.include_router(health_router, prefix="/api/health", tags=["health"])
 
 v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 v1.include_router(auth_router)
+v1.include_router(file_downloads_router)
 v1.include_router(market_router)
 v1.include_router(portfolios_router, dependencies=[Depends(require_user)])
 v1.include_router(integrations_router, dependencies=[Depends(require_user)])
