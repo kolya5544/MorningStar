@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Plus, Home, Trash2, Pencil } from "lucide-react";
@@ -18,7 +18,6 @@ import {
   getBybitTicker,
   updatePortfolio,
   importBybitKeys,
-  authMe,
   type Visibility,
   type UUID,
   type AssetSummary,
@@ -26,8 +25,8 @@ import {
   type TxCreate,
   type TxType,
   type BybitTicker,
-  type Role,
 } from "@/Api";
+import { useAuth } from "@/auth/AuthProvider";
 
 type UiAsset = { id: string; symbol: string; name: string; icon: string };
 
@@ -160,7 +159,11 @@ function fmtUsd(x: number) {
   }).format(x);
 }
 
-export function PortfolioView(): JSX.Element {
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+export function PortfolioView() {
   function openAddAsset() {
     setAssetModalErr(null);
     setAssetForm({ symbol: "", displayName: "", emoji: "" });
@@ -209,8 +212,8 @@ export function PortfolioView(): JSX.Element {
 
       setActive(created.id);
       setAssetModalOpen(false);
-    } catch (e: any) {
-      setAssetModalErr(e?.message ?? "Failed to add asset");
+    } catch (error: unknown) {
+      setAssetModalErr(getErrorMessage(error, "Failed to add asset"));
     } finally {
       setAssetSaving(false);
     }
@@ -290,8 +293,8 @@ export function PortfolioView(): JSX.Element {
       }
 
       setTxModalOpen(false);
-    } catch (e: any) {
-      setTxModalErr(e?.message ?? "Failed to save transaction");
+    } catch (error: unknown) {
+      setTxModalErr(getErrorMessage(error, "Failed to save transaction"));
     } finally {
       setTxSaving(false);
     }
@@ -299,19 +302,14 @@ export function PortfolioView(): JSX.Element {
 
   const { id } = useParams<{ id: UUID }>();
   const nav = useNavigate();
+  const { user } = useAuth();
 
   const [portfolioTitle, setPortfolioTitle] = useState<string>(id ?? "");
-  const [role, setRole] = useState<Role | null>(null);
-  const [meId, setMeId] = useState<string | null>(null);
-  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [assets, setAssets] = useState<UiAsset[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [busyAdd, setBusyAdd] = useState(false);
   const [txByAsset, setTxByAsset] = useState<Record<string, UiTx[]>>({});
-  const [txLoading, setTxLoading] = useState(false);
-  const [txErr, setTxErr] = useState<string | null>(null);
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [txEditingId, setTxEditingId] = useState<string | null>(null); // null => create
   const [txSaving, setTxSaving] = useState(false);
@@ -340,25 +338,7 @@ export function PortfolioView(): JSX.Element {
   const [txRefresh, setTxRefresh] = useState(0);
 
   const [copied, setCopied] = useState(false);
-  const readOnly = role === "manager" && ownerId !== null && meId !== ownerId;
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const me = await authMe();
-        if (!cancelled) {
-          setRole(me.role);
-          setMeId(me.id);
-        }
-      } catch {
-        // ignored here; auth wrapper handles invalid sessions
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const readOnly = user?.role === "manager";
 
   useEffect(() => {
     if (!active) {
@@ -381,10 +361,10 @@ export function PortfolioView(): JSX.Element {
 
         const q = await getBybitTicker(a.symbol, "spot");
         if (!cancelled) setQuote(q);
-      } catch (e: any) {
+      } catch (error: unknown) {
         if (!cancelled) {
           setQuote(null);
-          setQuoteErr(e?.message ?? "Failed to load market data");
+          setQuoteErr(getErrorMessage(error, "Failed to load market data"));
         }
       } finally {
         if (!cancelled) setQuoteLoading(false);
@@ -452,7 +432,6 @@ export function PortfolioView(): JSX.Element {
         if (cancelled) return;
 
         setPortfolioTitle(p.name);
-        setOwnerId(p.owner_id ?? null);
         setVis((p.visibility ?? "private") as Visibility);
         const ui: UiAsset[] = a.map((x: AssetSummary) => ({
           id: x.id,
@@ -461,8 +440,8 @@ export function PortfolioView(): JSX.Element {
           icon: pickIcon(x.symbol, x.emoji),
         }));
         setAssets(ui);
-      } catch (e: any) {
-        if (!cancelled) setErr(e?.message ?? "Failed to load");
+      } catch (error: unknown) {
+        if (!cancelled) setErr(getErrorMessage(error, "Failed to load"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -479,17 +458,14 @@ export function PortfolioView(): JSX.Element {
 
     (async () => {
       try {
-        setTxLoading(true);
-        setTxErr(null);
-
         const tx = await listTransactions(id, active as UUID);
         if (cancelled) return;
 
         setTxByAsset((prev) => ({ ...prev, [active]: tx.map(fromApiTx) }));
-      } catch (e: any) {
-        if (!cancelled) setTxErr(e?.message ?? "Failed to load transactions");
-      } finally {
-        if (!cancelled) setTxLoading(false);
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setErr(getErrorMessage(error, "Failed to load transactions"));
+        }
       }
     })();
 
@@ -552,7 +528,6 @@ export function PortfolioView(): JSX.Element {
                   Promise.all([getPortfolio(id), listAssets(id)])
                     .then(([p, a]) => {
                       setPortfolioTitle(p.name);
-                      setOwnerId(p.owner_id ?? null);
                       setAssets(
                         a.map((x) => ({
                           id: x.id,
@@ -600,7 +575,7 @@ export function PortfolioView(): JSX.Element {
             <Button
               className="flex-1"
               variant="outline"
-              disabled={busyAdd || !id}
+              disabled={!id}
               onClick={() => {
                 if (!id) return;
                 openAddAsset();
@@ -786,8 +761,8 @@ export function PortfolioView(): JSX.Element {
                                       (x) => x.id !== t.id,
                                     ),
                                   }));
-                                } catch (e: any) {
-                                  alert(e?.message ?? "Failed to delete transaction");
+                                } catch (error: unknown) {
+                                  alert(getErrorMessage(error, "Failed to delete transaction"));
                                 }
                               }}
                               title="Delete"
@@ -836,7 +811,6 @@ export function PortfolioView(): JSX.Element {
             // рефетчим assets + портфель
             const [p, a] = await Promise.all([getPortfolio(id), listAssets(id)]);
             setPortfolioTitle(p.name);
-            setOwnerId(p.owner_id ?? null);
             setVis((p.visibility ?? "private") as Visibility);
 
             const ui: UiAsset[] = a.map((x: AssetSummary) => ({
@@ -856,8 +830,8 @@ export function PortfolioView(): JSX.Element {
             setImportOpen(false);
             setImportKey("");
             setImportSecret("");
-          } catch (e: any) {
-            setImportErr(e?.message ?? "Import failed");
+          } catch (error: unknown) {
+            setImportErr(getErrorMessage(error, "Import failed"));
           } finally {
             setImportBusy(false);
           }
@@ -915,8 +889,8 @@ export function PortfolioView(): JSX.Element {
             setVis((updated.visibility ?? "private") as Visibility);
 
             setSettingsOpen(false);
-          } catch (e: any) {
-            setSettingsErr(e?.message ?? "Failed to save");
+          } catch (error: unknown) {
+            setSettingsErr(getErrorMessage(error, "Failed to save"));
           } finally {
             setSettingsBusy(false);
           }

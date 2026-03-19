@@ -1,18 +1,19 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Plus, Home, LogOut, Shield } from "lucide-react";
-import { Modal } from "@/components/ui/modal";
-import { clearAccessToken, isAuthError, authMe, type Role } from "@/Api";
 import {
-  listPortfolios,
   createPortfolio,
   importPortfolio,
-  type PortfolioSummary as SPortfolioSummary,
-  type PortfolioDetail as SPortfolioDetail,
+  isAuthError,
+  listPortfolios,
+  type PortfolioDetail as ServerPortfolioDetail,
+  type PortfolioSummary as ServerPortfolioSummary,
   type Visibility,
 } from "@/Api";
+import { useAuth } from "@/auth/AuthProvider";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
+import { Input } from "@/components/ui/input";
+import { Home, LogOut, Plus, Shield } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export type Portfolio = {
   id: string;
@@ -24,105 +25,54 @@ export type Portfolio = {
   visibility?: "public" | "private";
 };
 
-function fmtMoney(v: number) {
+function fmtMoney(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
-  }).format(v);
+  }).format(value);
 }
 
-function mapSummary(p: SPortfolioSummary): Portfolio {
+function mapSummary(portfolio: ServerPortfolioSummary): Portfolio {
   return {
-    id: p.id,
-    name: p.name,
-    emoji: p.emoji ?? "[P]",
-    balance: Number(p.balance_usd ?? "0"),
-    pnlDay: Number(p.pnl_day_usd ?? "0"),
-    kind: p.kind,
-    visibility: p.visibility ?? undefined,
+    id: portfolio.id,
+    name: portfolio.name,
+    emoji: portfolio.emoji ?? "[P]",
+    balance: Number(portfolio.balance_usd ?? "0"),
+    pnlDay: Number(portfolio.pnl_day_usd ?? "0"),
+    kind: portfolio.kind,
+    visibility: portfolio.visibility ?? undefined,
   };
 }
 
-export default function Dashboard(): JSX.Element {
+export default function Dashboard() {
   const nav = useNavigate();
+  const { user, signOut } = useAuth();
   const [items, setItems] = useState<Portfolio[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [openAdd, setOpenAdd] = useState(false);
-  const [role, setRole] = useState<Role | null>(null);
-  const [meId, setMeId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const me = await authMe();
-        if (!cancelled) {
-          setRole(me.role);
-          setMeId(me.id);
-        }
-      } catch {
-        // Ignore; auth failures are handled by portfolio loading below.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        setErr(null);
-        const data = await listPortfolios();
-        if (!cancelled) {
-          const filtered =
-            role === "manager" && meId ? data.filter((p) => p.owner_id === meId) : data;
-          setItems(filtered.map(mapSummary));
-        }
-      } catch (e: any) {
-        if (isAuthError(e)) {
-          clearAccessToken();
-          nav("/", { replace: true });
-          return;
-        }
-        if (!cancelled) setErr(e?.message ?? "Failed to load");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [nav, role, meId]);
-
-  const reloadPortfolios = async () => {
-    setLoading(true);
-    setErr(null);
+  const loadPortfolios = useCallback(async () => {
     try {
+      setLoading(true);
+      setErr(null);
       const data = await listPortfolios();
-      const filtered =
-        role === "manager" && meId ? data.filter((p) => p.owner_id === meId) : data;
-      setItems(filtered.map(mapSummary));
-    } catch (e: any) {
-      if (isAuthError(e)) {
-        clearAccessToken();
-        nav("/", { replace: true });
+      setItems(data.map(mapSummary));
+    } catch (error: unknown) {
+      if (isAuthError(error)) {
+        await signOut();
         return;
       }
-      setErr(e?.message ?? "Failed to load");
+      setErr(error instanceof Error ? error.message : "Failed to load");
     } finally {
       setLoading(false);
     }
-  };
+  }, [signOut]);
 
-  const logout = () => {
-    clearAccessToken();
-    nav("/", { replace: true });
-  };
+  useEffect(() => {
+    void loadPortfolios();
+  }, [loadPortfolios]);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -136,9 +86,9 @@ export default function Dashboard(): JSX.Element {
                 className="h-8 w-8 shrink-0 align-middle"
               />
               <span className="text-lg font-semibold tracking-wide">MorningStar</span>
-              {role && role !== "user" && (
+              {user?.role && user.role !== "user" && (
                 <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs uppercase tracking-wide text-zinc-300">
-                  {role}
+                  {user.role}
                 </span>
               )}
             </div>
@@ -146,12 +96,12 @@ export default function Dashboard(): JSX.Element {
               <Button variant="outline" onClick={() => nav("/dashboard")}>
                 <Home className="mr-2 h-4 w-4" /> Home
               </Button>
-              {(role === "manager" || role === "admin") && (
+              {(user?.role === "manager" || user?.role === "admin") && (
                 <Button variant="outline" onClick={() => nav("/control-panel")}>
                   <Shield className="mr-2 h-4 w-4" /> Control Panel
                 </Button>
               )}
-              <Button variant="outline" onClick={logout}>
+              <Button variant="outline" onClick={() => void signOut()}>
                 <LogOut className="mr-2 h-4 w-4" /> Logout
               </Button>
             </nav>
@@ -162,8 +112,10 @@ export default function Dashboard(): JSX.Element {
 
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Your portfolios</h1>
-          {role && (
+          <h1 className="text-2xl font-semibold">
+            {user?.role === "manager" ? "Available portfolios" : "Your portfolios"}
+          </h1>
+          {user && user.role !== "manager" && (
             <Button onClick={() => setOpenAdd(true)}>
               <Plus className="mr-2 h-4 w-4" /> New portfolio
             </Button>
@@ -172,9 +124,9 @@ export default function Dashboard(): JSX.Element {
 
         {loading && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
+            {Array.from({ length: 3 }).map((_, index) => (
               <div
-                key={i}
+                key={index}
                 className="h-[140px] rounded-2xl border border-white/10 bg-zinc-950/80 p-4 animate-pulse"
               />
             ))}
@@ -184,42 +136,44 @@ export default function Dashboard(): JSX.Element {
         {!loading && err && (
           <div className="text-sm text-red-400">
             {err}{" "}
-            <button className="underline decoration-dotted" onClick={() => void reloadPortfolios()}>
+            <button className="underline decoration-dotted" onClick={() => void loadPortfolios()}>
               retry
             </button>
           </div>
         )}
 
         {!loading && !err && items.length === 0 && (
-          <div className="text-zinc-400">No portfolios yet. Create the first one.</div>
+          <div className="text-zinc-400">
+            {user?.role === "manager" ? "No portfolios available." : "No portfolios yet. Create the first one."}
+          </div>
         )}
 
         {!loading && !err && items.length > 0 && (
           <div className="grid grid-cols-1 gap-4 place-items-stretch sm:grid-cols-2 lg:grid-cols-3">
-            {items.map((p) => (
+            {items.map((portfolio) => (
               <button
-                key={p.id}
-                onClick={() => nav(`/dashboard/${p.id}`)}
+                key={portfolio.id}
+                onClick={() => nav(`/dashboard/${portfolio.id}`)}
                 className="group flex flex-col rounded-2xl border border-white/10 bg-zinc-950/80 p-4 text-left transition hover:bg-white/5"
               >
                 <div className="flex items-start justify-between">
                   <div className="text-2xl leading-none" aria-hidden>
-                    {p.emoji}
+                    {portfolio.emoji}
                   </div>
                   <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-zinc-300">
-                    {p.kind}
-                    {p.kind === "personal" && p.visibility ? ` - ${p.visibility}` : ""}
+                    {portfolio.kind}
+                    {portfolio.kind === "personal" && portfolio.visibility ? ` - ${portfolio.visibility}` : ""}
                   </span>
                 </div>
-                <div className="mt-3 line-clamp-1 text-base font-medium">{p.name}</div>
-                <div className="mt-1 text-sm text-zinc-400">{fmtMoney(p.balance)}</div>
+                <div className="mt-3 line-clamp-1 text-base font-medium">{portfolio.name}</div>
+                <div className="mt-1 text-sm text-zinc-400">{fmtMoney(portfolio.balance)}</div>
                 <div
                   className={`mt-4 text-sm font-medium ${
-                    p.pnlDay >= 0 ? "text-emerald-400" : "text-red-400"
+                    portfolio.pnlDay >= 0 ? "text-emerald-400" : "text-red-400"
                   }`}
                 >
-                  {p.pnlDay >= 0 ? "+" : ""}
-                  {fmtMoney(p.pnlDay)} today
+                  {portfolio.pnlDay >= 0 ? "+" : ""}
+                  {fmtMoney(portfolio.pnlDay)} today
                 </div>
               </button>
             ))}
@@ -231,7 +185,7 @@ export default function Dashboard(): JSX.Element {
         open={openAdd}
         onClose={() => setOpenAdd(false)}
         onCreate={async (data) => {
-          const created: SPortfolioDetail = await createPortfolio({
+          const created: ServerPortfolioDetail = await createPortfolio({
             name: data.name,
             emoji: data.emoji,
             visibility: data.visibility as Visibility,
@@ -312,8 +266,8 @@ function AddPortfolioModal({
           }
           await onSubscribe(portfolioId.trim());
           resetState();
-        } catch (e: any) {
-          setError(e?.message ?? (tab === "create" ? "Failed to create" : "Failed to import"));
+        } catch (error: unknown) {
+          setError(error instanceof Error ? error.message : tab === "create" ? "Failed to create" : "Failed to import");
         } finally {
           setBusy(false);
         }

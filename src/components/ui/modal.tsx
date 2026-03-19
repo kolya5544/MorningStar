@@ -35,7 +35,7 @@ export function Modal({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={onPrimary}>Continue</Button>
+          <Button onClick={onPrimary}>{primaryLabel}</Button>
         </div>
       </div>
     </div>

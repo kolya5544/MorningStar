@@ -36,7 +36,7 @@ from app.models.asset import AssetCreate, AssetSummary
 from app.models.tx import TxCreate, TxItem
 from app.models.timeseries import TimeseriesResponse, Timepoint
 from app.routers.market import fetch_ticker
-from app.auth import require_user, require_roles
+from app.auth import require_user
 import os
 from pybit.unified_trading import HTTP
 from collections import defaultdict
@@ -113,7 +113,7 @@ def _t_or_404(db: Session, pid: UUID, tid: UUID, user_id: str) -> TxORM:
 
 def _require_owner_level_write(request: Request) -> tuple[str, Role]:
     user_id, role = _user_and_role(request)
-    if role not in (Role.user, Role.manager, Role.admin):
+    if role not in (Role.user, Role.admin):
         raise HTTPException(status_code=403, detail="Forbidden")
     return user_id, role
 
@@ -301,7 +301,7 @@ def import_portfolio(
 ):
     """Import a public portfolio by ID.
 
-    Users and managers may import into their own account. Admins may import as well.
+    Users may import into their own account. Admins may import as well.
     """
     user_id, role = _require_owner_level_write(request)
     src = db.get(PortfolioORM, str(body.source_id))
