@@ -3,11 +3,28 @@ import { useAuth } from "@/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { useSeo } from "@/lib/seo";
 import { LogIn, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 
 export default function Landing() {
+  useSeo({
+    title: "MorningStar | Crypto Portfolio Tracker",
+    description:
+      "MorningStar helps investors monitor crypto portfolios, import exchange balances, and review performance in one dashboard.",
+    canonicalPath: "/",
+    robots: "index,follow",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "MorningStar",
+      url: `${window.location.origin}/`,
+      description:
+        "Crypto portfolio tracker with exchange imports, asset operations, and protected portfolio management.",
+    },
+  });
+
   const { isAuthenticated, signIn } = useAuth();
   const [openSignUp, setOpenSignUp] = useState(false);
   const [openLogin, setOpenLogin] = useState(false);
@@ -42,10 +59,12 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-black text-white relative">
-      <div
+      <img
+        src="/bg.jpg"
+        alt=""
         aria-hidden
-        className="absolute inset-0 z-0 bg-center bg-cover"
-        style={{ backgroundImage: "url('/bg.jpg')" }}
+        fetchPriority="high"
+        className="absolute inset-0 z-0 h-full w-full object-cover"
       />
       <div className="absolute inset-0 z-10 bg-black/70" />
 
@@ -57,6 +76,8 @@ export default function Landing() {
                 <img
                   src="/morningstar.svg"
                   alt="MorningStar"
+                  width={32}
+                  height={32}
                   className="h-8 w-8 shrink-0 align-middle"
                 />
                 <span className="text-lg font-semibold tracking-wide">MorningStar</span>
@@ -75,7 +96,7 @@ export default function Landing() {
                 </span>
               </div>
 
-              <nav className="flex items-center gap-2">
+              <nav aria-label="Landing actions" className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   onClick={() => setOpenLogin(true)}
@@ -95,27 +116,71 @@ export default function Landing() {
           <div className="h-px w-full bg-gradient-to-r from-transparent via-[#16335f] to-transparent opacity-50" />
         </header>
 
-        <main className="mx-auto flex max-w-7xl flex-col items-center px-4 py-24 sm:py-32 text-center">
-          <h1 className="text-4xl font-bold sm:text-5xl md:text-6xl">Plan your future ahead!</h1>
-          <p className="mt-4 max-w-2xl text-base sm:text-lg text-zinc-300">
-            Track crypto portfolios, import wallets, and see your performance at a glance.
-          </p>
+        <main>
+          <section className="mx-auto flex max-w-7xl flex-col items-center px-4 py-24 text-center sm:py-32">
+            <h1 className="text-4xl font-bold sm:text-5xl md:text-6xl">Plan your future ahead!</h1>
+            <p className="mt-4 max-w-2xl text-base text-zinc-300 sm:text-lg">
+              Track crypto portfolios, import exchange balances, and review daily performance in one place.
+            </p>
 
-          <div className="mt-8 flex flex-col sm:flex-row items-center gap-3">
-            <Button
-              className="h-11 px-6 text-sm bg-[#0b1f3a] hover:bg-[#0e2a54] border border-[#16335f]"
-              onClick={() => setOpenSignUp(true)}
-            >
-              <UserPlus className="mr-2 h-4 w-4" /> Sign Up
-            </Button>
-            <Button
-              variant="outline"
-              className="h-11 px-6 text-sm border-zinc-700/80 bg-white/0 text-white hover:bg-white/5"
-              onClick={() => setOpenLogin(true)}
-            >
-              <LogIn className="mr-2 h-4 w-4" /> Log In
-            </Button>
-          </div>
+            <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
+              <Button
+                className="h-11 border border-[#16335f] bg-[#0b1f3a] px-6 text-sm hover:bg-[#0e2a54]"
+                onClick={() => setOpenSignUp(true)}
+              >
+                <UserPlus className="mr-2 h-4 w-4" /> Sign Up
+              </Button>
+              <Button
+                variant="outline"
+                className="h-11 border-zinc-700/80 bg-white/0 px-6 text-sm text-white hover:bg-white/5"
+                onClick={() => setOpenLogin(true)}
+              >
+                <LogIn className="mr-2 h-4 w-4" /> Log In
+              </Button>
+            </div>
+          </section>
+
+          <section className="mx-auto grid max-w-7xl gap-6 px-4 pb-16 sm:grid-cols-3">
+            <article className="rounded-3xl border border-white/10 bg-black/40 p-6 backdrop-blur">
+              <h2 className="text-xl font-semibold">Portfolio overview</h2>
+              <p className="mt-3 text-sm leading-6 text-zinc-300">
+                Build personal or subscribed portfolios, monitor balances, and keep asset operations in one dashboard.
+              </p>
+            </article>
+            <article className="rounded-3xl border border-white/10 bg-black/40 p-6 backdrop-blur">
+              <h2 className="text-xl font-semibold">Bybit market data</h2>
+              <p className="mt-3 text-sm leading-6 text-zinc-300">
+                MorningStar enriches portfolio data with external exchange quotes and protected server-side imports.
+              </p>
+            </article>
+            <article className="rounded-3xl border border-white/10 bg-black/40 p-6 backdrop-blur">
+              <h2 className="text-xl font-semibold">Protected workspace</h2>
+              <p className="mt-3 text-sm leading-6 text-zinc-300">
+                Authentication, role-based access, and signed file downloads keep private sections outside search indexing.
+              </p>
+            </article>
+          </section>
+
+          <section className="mx-auto max-w-5xl px-4 pb-20">
+            <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-8">
+              <h2 className="text-2xl font-semibold">Why MorningStar is SEO-ready</h2>
+              <div className="mt-6 grid gap-6 md:grid-cols-2">
+                <div>
+                  <h3 className="text-lg font-medium">Clear information architecture</h3>
+                  <p className="mt-2 text-sm leading-6 text-zinc-400">
+                    Public content is limited to the landing page, while dashboards and admin screens are explicitly marked
+                    as closed for indexing.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium">Reliable external integrations</h3>
+                  <p className="mt-2 text-sm leading-6 text-zinc-400">
+                    Exchange requests are routed through FastAPI with retries, request throttling, and normalized responses.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
         </main>
 
         <Modal

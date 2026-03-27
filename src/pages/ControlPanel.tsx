@@ -10,6 +10,7 @@ import {
 } from "@/Api";
 import { useAuth } from "@/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
+import { useSeo } from "@/lib/seo";
 import { Home, LogOut, RefreshCw, Shield, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -23,6 +24,13 @@ function fmtMoney(value: string) {
 }
 
 export default function ControlPanel() {
+  useSeo({
+    title: "Control Panel | MorningStar",
+    description: "Restricted administration area for MorningStar roles and portfolio moderation.",
+    canonicalPath: "/control-panel",
+    robots: "noindex,nofollow",
+  });
+
   const nav = useNavigate();
   const { user, signOut, refreshUser } = useAuth();
   const [portfolios, setPortfolios] = useState<PortfolioSummary[]>([]);
