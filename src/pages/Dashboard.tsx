@@ -13,6 +13,7 @@ import { useAuth } from "@/auth/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
+import { useSeo } from "@/lib/seo";
 import { Home, LogOut, Plus, Search, Shield, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -79,6 +80,13 @@ export default function Dashboard() {
     page_size: Number(searchParams.get("page_size") ?? "6") || 6,
   }), [searchParams]);
 
+  useSeo({
+    title: "Dashboard | MorningStar",
+    description: "Private MorningStar dashboard for managing crypto portfolios and filters.",
+    canonicalPath: "/dashboard",
+    robots: "noindex,nofollow",
+  });
+
   const loadPortfolios = useCallback(async () => {
     try {
       setLoading(true);
@@ -110,6 +118,8 @@ export default function Dashboard() {
               <img
                 src="/morningstar.svg"
                 alt="MorningStar"
+                width={32}
+                height={32}
                 className="h-8 w-8 shrink-0 align-middle"
               />
               <span className="text-lg font-semibold tracking-wide">MorningStar</span>

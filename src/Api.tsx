@@ -354,10 +354,21 @@ export type BybitTicker = {
   volume24h: string;
   usdIndexPrice?: string | null;
 };
-export const getBybitTicker = (base: string, category = "spot") =>
-  request<BybitTicker>(
+const tickerCache = new Map<string, { expiresAt: number; data: BybitTicker }>();
+export const getBybitTicker = (base: string, category = "spot") => {
+  const cacheKey = `${category}:${base.trim().toUpperCase()}`;
+  const hit = tickerCache.get(cacheKey);
+  if (hit && hit.expiresAt > Date.now()) {
+    return Promise.resolve(hit.data);
+  }
+
+  return request<BybitTicker>(
     `/v1/market/bybit/ticker/${encodeURIComponent(base)}?category=${encodeURIComponent(category)}`,
-  );
+  ).then((data) => {
+    tickerCache.set(cacheKey, { data, expiresAt: Date.now() + 15_000 });
+    return data;
+  });
+};
 
 export type AuthRegisterResponse = { ok: boolean };
 export type AuthTokenResponse = {

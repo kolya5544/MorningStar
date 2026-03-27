@@ -9,6 +9,16 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      "/robots.txt": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+        secure: false,
+      },
+      "/sitemap.xml": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+        secure: false,
+      },
       "/api": {
         target: "http://127.0.0.1:8000",
         changeOrigin: true,

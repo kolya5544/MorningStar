@@ -32,6 +32,7 @@ import {
   type PortfolioFileItem,
 } from "@/Api";
 import { useAuth } from "@/auth/AuthProvider";
+import { useSeo } from "@/lib/seo";
 
 type UiAsset = { id: string; symbol: string; name: string; icon: string };
 
@@ -359,6 +360,13 @@ export function PortfolioView() {
   const [fileErr, setFileErr] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  useSeo({
+    title: `${portfolioTitle || "Portfolio"} | MorningStar`,
+    description: "Private MorningStar portfolio page with asset details, transactions, files, and exchange imports.",
+    canonicalPath: id ? `/dashboard/${id}` : "/dashboard",
+    robots: "noindex,nofollow",
+  });
+
   const loadFiles = useCallback(async () => {
     if (!id) return;
     try {
@@ -386,22 +394,26 @@ export function PortfolioView() {
   useEffect(() => {
     if (!active) {
       setQuote(null);
+      setQuoteErr(null);
+      setQuoteLoading(false);
       return;
     }
 
     const a = assets.find((x) => x.id === active);
     if (!a?.symbol) {
       setQuote(null);
+      setQuoteErr(null);
+      setQuoteLoading(false);
       return;
     }
 
     let cancelled = false;
+    setQuote(null);
+    setQuoteErr(null);
+    setQuoteLoading(true);
 
     (async () => {
       try {
-        setQuoteLoading(true);
-        setQuoteErr(null);
-
         const q = await getBybitTicker(a.symbol, "spot");
         if (!cancelled) setQuote(q);
       } catch (error: unknown) {
@@ -525,7 +537,7 @@ export function PortfolioView() {
       <aside className="h-full border-r border-white/10 bg-zinc-950/60 flex flex-col">
         <div className="h-16 px-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src="/morningstar.svg" alt="MorningStar" className="h-7 w-7" />
+            <img src="/morningstar.svg" alt="MorningStar" width={28} height={28} className="h-7 w-7" />
             <span className="font-medium line-clamp-1" title={portfolioTitle}>
               {portfolioTitle || id}
             </span>
@@ -688,7 +700,9 @@ export function PortfolioView() {
                       </div>
                     </>
                   ) : (
-                    <div className="text-xs text-zinc-500">{quoteErr ?? "No market data"}</div>
+                    <div className="text-xs text-zinc-500">
+                      {quoteErr ?? "No market data"} Transactions remain available without market quotes.
+                    </div>
                   )}
                 </div>
 

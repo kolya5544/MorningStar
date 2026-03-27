@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal, Optional
@@ -13,9 +14,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
-import os
-from pybit.unified_trading import HTTP
 
 from app.auth import require_user
 from app.db import get_db
@@ -41,8 +39,10 @@ from app.services.object_storage import (
     ObjectStorageError,
     ObjectStorageService,
 )
+from app.services.bybit import BybitService, BybitServiceError
 
 router = APIRouter()
+bybit_service = BybitService()
 
 PortfolioSortField = Literal["created_at", "name", "balance_usd"]
 SortDirection = Literal["asc", "desc"]
@@ -286,8 +286,8 @@ class PortfolioImportRequest(BaseModel):
 
 
 class BybitKeysImportRequest(BaseModel):
-    api_key: str = Field(min_length=6, max_length=128)
-    api_secret: str = Field(min_length=6, max_length=256)
+    api_key: Optional[str] = Field(default=None, min_length=6, max_length=128)
+    api_secret: Optional[str] = Field(default=None, min_length=6, max_length=256)
 
 
 class AssetUpdate(BaseModel):
@@ -477,69 +477,18 @@ def import_bybit_keys(
     if role == Role.admin:
         user_id = portfolio.user_id
 
-    session = HTTP(
-        testnet=os.getenv("BYBIT_TESTNET", "0") == "1",
-        api_key=body.api_key,
-        api_secret=body.api_secret,
-    )
+    resolved_api_key = (body.api_key or os.getenv("BYBIT_API_KEY") or "").strip()
+    resolved_api_secret = (body.api_secret or os.getenv("BYBIT_API_SECRET") or "").strip()
+    if not resolved_api_key or not resolved_api_secret:
+        raise HTTPException(status_code=503, detail="Bybit credentials are not configured")
 
     try:
-        response_unified = session.get_wallet_balance(accountType="UNIFIED")
-        response_fund = session.get_coins_balance(accountType="FUND")
-        response_ticks = session.get_tickers(category="spot")
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Bybit request failed: {exc}")
-
-    def _bybit_ok_or_502(payload: dict, where: str) -> None:
-        if not isinstance(payload, dict) or payload.get("retCode") != 0:
-            msg = payload.get("retMsg") if isinstance(payload, dict) else None
-            raise HTTPException(status_code=502, detail=f"Bybit error at {where}: {msg}")
-
-    def _d0(value) -> Decimal:
-        try:
-            raw = str(value if value is not None else "0").strip()
-            return Decimal(raw or "0")
-        except Exception:
-            return Decimal("0")
-
-    def _parse_unified_wallet_balance(payload: dict) -> dict[str, Decimal]:
-        out: dict[str, Decimal] = {}
-        for account in (((payload.get("result") or {}).get("list")) or []):
-            for coin in account.get("coin") or []:
-                symbol = (coin.get("coin") or "").strip().upper()
-                balance = _d0(coin.get("walletBalance"))
-                if symbol and balance != 0:
-                    out[symbol] = out.get(symbol, Decimal("0")) + balance
-        return out
-
-    def _parse_fund_all_balance(payload: dict) -> dict[str, Decimal]:
-        out: dict[str, Decimal] = {}
-        for item in ((payload.get("result") or {}).get("balance")) or []:
-            symbol = (item.get("coin") or "").strip().upper()
-            balance = _d0(item.get("walletBalance"))
-            if symbol and balance != 0:
-                out[symbol] = out.get(symbol, Decimal("0")) + balance
-        return out
-
-    _bybit_ok_or_502(response_unified, "wallet-balance")
-    _bybit_ok_or_502(response_fund, "all-balance")
-    _bybit_ok_or_502(response_ticks, "tickers")
-
-    holdings: dict[str, Decimal] = {}
-    for symbol, balance in _parse_unified_wallet_balance(response_unified).items():
-        holdings[symbol] = holdings.get(symbol, Decimal("0")) + balance
-    for symbol, balance in _parse_fund_all_balance(response_fund).items():
-        holdings[symbol] = holdings.get(symbol, Decimal("0")) + balance
-
-    prices: dict[str, Decimal] = {}
-    for item in (((response_ticks.get("result") or {}).get("list")) or []):
-        symbol = (item.get("symbol") or "").strip().upper()
-        if not symbol.endswith("USDT"):
-            continue
-        base = symbol[:-4]
-        last = _d0(item.get("lastPrice"))
-        if base and last > 0:
-            prices[base] = last
+        snapshot = bybit_service.fetch_portfolio_snapshot(
+            api_key=resolved_api_key,
+            api_secret=resolved_api_secret,
+        )
+    except BybitServiceError as exc:
+        raise HTTPException(status_code=502, detail=exc.message)
 
     excluded = {"USDT", "USDC", "DAI"}
     threshold = Decimal("0.5")
@@ -547,11 +496,11 @@ def import_bybit_keys(
     asset_by_symbol = {asset.symbol.strip().upper(): asset for asset in assets_cache}
     now = datetime.now(timezone.utc)
 
-    for coin, balance in holdings.items():
+    for coin, balance in snapshot.holdings.items():
         symbol = coin.strip().upper()
         if not symbol or symbol in excluded:
             continue
-        price = prices.get(symbol)
+        price = snapshot.prices.get(symbol)
         if not price or balance * price < threshold:
             continue
         asset = asset_by_symbol.get(symbol)
