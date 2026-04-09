@@ -18,12 +18,17 @@ from app.routers.portfolios import router as portfolios_router
 load_dotenv()
 
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost").rstrip("/")
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("BACKEND_CORS_ORIGINS", "*").split(",")
+    if origin.strip()
+]
 
 app = FastAPI(title=os.getenv("SERVICE_NAME", "morningstar-api"))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

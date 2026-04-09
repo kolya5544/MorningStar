@@ -33,3 +33,13 @@ dist-ssr
 server/morningstar.sqlite
 
 .env
+.env.*
+!.env.example
+!.env.deploy.example
+!.env.ci.example
+coverage/
+test-results/
+.coverage
+.pytest_cache/
+server/test_app.db
+server/test_object_storage/

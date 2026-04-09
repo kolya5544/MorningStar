@@ -3,13 +3,13 @@ services:
     image: postgres:16-alpine
     container_name: morningstar-db
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-morningstar}
-      POSTGRES_USER: ${POSTGRES_USER:-morningstar}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-morningstar}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-morningstar} -d ${POSTGRES_DB:-morningstar}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -19,24 +19,21 @@ services:
       - backend
 
   api:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    image: ${BACKEND_IMAGE:-morningstar-api}:${IMAGE_TAG:-local}
+    image: ${BACKEND_IMAGE}:${IMAGE_TAG}
     container_name: morningstar-api
     environment:
       SERVICE_NAME: morningstar-api
-      SERVICE_VERSION: v0.1.0
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:5482}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://morningstar:morningstar@db:5432/morningstar}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
-      OBJECT_STORAGE_SECRET: ${OBJECT_STORAGE_SECRET:-dev-secret-change-me}
+      SERVICE_VERSION: ${SERVICE_VERSION:-v0.1.0}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      OBJECT_STORAGE_SECRET: ${OBJECT_STORAGE_SECRET}
       OBJECT_STORAGE_ROOT: ${OBJECT_STORAGE_ROOT:-/data/object_storage}
       OBJECT_STORAGE_MAX_FILE_SIZE: ${OBJECT_STORAGE_MAX_FILE_SIZE:-5242880}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
       PBKDF2_ITERS: ${PBKDF2_ITERS:-200000}
-      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5482,http://localhost:5173}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
       BYBIT_TESTNET: ${BYBIT_TESTNET:-0}
       BYBIT_TIMEOUT_SEC: ${BYBIT_TIMEOUT_SEC:-8}
       BYBIT_RETRIES: ${BYBIT_RETRIES:-3}
@@ -53,13 +50,11 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       API_STARTUP_DB_RETRIES: ${API_STARTUP_DB_RETRIES:-20}
       API_STARTUP_DB_DELAY_SEC: ${API_STARTUP_DB_DELAY_SEC:-3}
-    expose:
-      - "8080"
-    volumes:
-      - object_storage:/data/object_storage
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - object_storage:/data/object_storage
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/health/ | python -c \"import json,sys; data=json.load(sys.stdin); sys.exit(0 if data.get('status')=='ok' and data.get('dependencies',{}).get('database')=='ok' else 1)\""]
       interval: 20s
@@ -72,13 +67,10 @@ services:
       - edge
 
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile.web
-    image: ${FRONTEND_IMAGE:-morningstar-web}:${IMAGE_TAG:-local}
+    image: ${FRONTEND_IMAGE}:${IMAGE_TAG}
     container_name: morningstar-web
     ports:
-      - "5482:80"
+      - "${WEB_PORT:-80}:80"
     depends_on:
       api:
         condition: service_healthy
@@ -102,3 +94,4 @@ networks:
     internal: true
   edge:
     driver: bridge
+
