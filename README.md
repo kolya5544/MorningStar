@@ -1,73 +1,109 @@
-# React + TypeScript + Vite
+# MorningStar
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+MorningStar is a full-stack MVP for managing crypto portfolios. The project includes a React + TypeScript frontend, a FastAPI backend, PostgreSQL for persistent data, and an Nginx reverse proxy for edge routing.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Frontend: React, TypeScript, Vite
+- Backend: FastAPI, SQLAlchemy
+- Database: PostgreSQL 16
+- Reverse proxy: Nginx
+- Testing: Pytest, Vitest, Playwright
+- Delivery: Docker, Docker Compose, GitHub Actions, GHCR
 
-## React Compiler
+## Container Architecture
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The containerized runtime is split into these services:
 
-## Expanding the ESLint configuration
+- `web`: serves the built SPA and proxies `/api`, `robots.txt`, and `sitemap.xml` to the backend.
+- `api`: runs FastAPI, performs DB readiness checks at startup, and exposes the application API.
+- `db`: PostgreSQL with a persistent named volume.
+- `object_storage`: implemented as a persistent Docker volume mounted into the backend container.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Network layout:
 
-```js
-export default defineConfig([
-  globalIgnores(["dist"]),
-  {
-    files: ["**/*.{ts,tsx}"],
-    extends: [
-      // Other configs...
+- `edge`: public bridge network used by `web` and `api`.
+- `backend`: internal bridge network used by `api` and `db`; the database is not exposed publicly.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+More details are documented in [docs/lab6-containerization.md](C:/Users/kolya5544/source/repos/MorningStar/docs/lab6-containerization.md).
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
+## Local Run Without Docker
+
+Frontend:
+
+```powershell
+cmd /c npm ci
+cmd /c npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Backend:
 
-```js
-// eslint.config.js
-import reactX from "eslint-plugin-react-x";
-import reactDom from "eslint-plugin-react-dom";
-
-export default defineConfig([
-  globalIgnores(["dist"]),
-  {
-    files: ["**/*.{ts,tsx}"],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs["recommended-typescript"],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
+```powershell
+python -m pip install -r server\requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --app-dir server
 ```
+
+## Local Run With Docker Compose
+
+1. Create `.env` from [.env.example](C:/Users/kolya5544/source/repos/MorningStar/.env.example).
+2. Start the stack:
+
+```powershell
+cmd /c docker compose up --build
+```
+
+3. Open:
+
+- frontend: `http://localhost:5482`
+- backend health: `http://localhost:5482/api/health/`
+
+Stop the stack:
+
+```powershell
+cmd /c docker compose down
+```
+
+Reset with volumes:
+
+```powershell
+cmd /c docker compose down -v
+```
+
+## Quality Checks
+
+Backend:
+
+```powershell
+pytest
+```
+
+Frontend:
+
+```powershell
+cmd /c npm run lint
+cmd /c npm test
+cmd /c npm run test:e2e
+```
+
+## Production Deployment
+
+Production deployment files are stored in [deploy/docker-compose.prod.yml](C:/Users/kolya5544/source/repos/MorningStar/deploy/docker-compose.prod.yml) and [deploy/deploy.sh](C:/Users/kolya5544/source/repos/MorningStar/deploy/deploy.sh).
+
+The GitHub Actions workflow:
+
+1. runs linting and all mandatory tests;
+2. builds and publishes frontend/backend images to GHCR;
+3. copies deployment files to the server;
+4. writes the production `.env`;
+5. pulls and restarts the stack on the target host.
+
+Required GitHub secrets:
+
+- `DEPLOY_HOST`
+- `DEPLOY_PORT`
+- `DEPLOY_USER`
+- `DEPLOY_SSH_KEY`
+- `DEPLOY_PATH`
+- `PROD_ENV_FILE`
+
+Use [.env.deploy.example](C:/Users/kolya5544/source/repos/MorningStar/.env.deploy.example) as the template for the production environment file kept in `PROD_ENV_FILE`.

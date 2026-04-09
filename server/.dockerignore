@@ -1,0 +1,12 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+tests
+.env
+.env.*
+!*.example
+test_app.db
+test_object_storage
+
