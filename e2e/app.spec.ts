@@ -41,7 +41,7 @@ test("supports role-based CRUD and read-only behavior", async ({ page }) => {
   await page.getByPlaceholder("BTC").fill("SOL");
   await page.getByPlaceholder("Bitcoin (optional)").fill("Solana");
   await page.getByRole("button", { name: /^Add$/ }).last().click();
-  await expect(page.getByText("Solana")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Solana" })).toBeVisible();
 
   await login(page, "manager@example.com", "ManagerPass123");
   await expect(page.getByText("Available portfolios")).toBeVisible();
