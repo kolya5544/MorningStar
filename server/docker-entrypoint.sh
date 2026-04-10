@@ -26,4 +26,4 @@ for attempt in range(1, retries + 1):
         time.sleep(delay)
 PY
 
-exec uvicorn app.main:app --host 0.0.0.0 --port 8080
+exec uvicorn app.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips='*'
